@@ -1,0 +1,55 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        
+    - name: Install CDK dependencies
+      run: |
+        cd cd-code
+        pip install -r requirements.txt
+        
+    - name: Install AWS CDK
+      run: |
+        pip install aws-cdk-lib constructs
+        
+    - name: Bootstrap CDK (if needed)
+      run: |
+        cd cd-code
+        cdk bootstrap || true
+        
+    - name: Deploy CDK Stack
+      run: |
+        cd cd-code
+        cdk deploy --require-approval never
