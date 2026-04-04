@@ -54,15 +54,10 @@ class IncomeReportProcessStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
-        # S3 bucket for CSV files
-        csv_bucket = s3.Bucket(
+        # S3 bucket for CSV files (use existing bucket)
+        csv_bucket = s3.Bucket.from_bucket_name(
             self, "ExpensesCsvBucket",
-            bucket_name="income-report-expenses-csv",
-            removal_policy=RemovalPolicy.DESTROY if os.environ.get('CDK_ENV') == 'dev' else RemovalPolicy.RETAIN,
-            auto_delete_objects=True if os.environ.get('CDK_ENV') == 'dev' else False,
-            versioned=True,
-            encryption=s3.BucketEncryption.S3_MANAGED,
-            block_public_access=s3.BlockPublicAccess.BLOCK_ALL
+            "income-report-expenses-csv"
         )
 
         # Lambda function
