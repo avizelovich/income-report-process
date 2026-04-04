@@ -128,6 +128,7 @@ def process_all_csv_files():
         
         csv_files = [obj for obj in all_objects if obj['Key'].endswith('.csv')]
         print(f"CSV files found: {len(csv_files)}")
+        print(f"CSV file details: {[{'Key': obj['Key'], 'Size': obj['Size']} for obj in csv_files]}")
         
         if not csv_files:
             return {
@@ -155,7 +156,16 @@ def process_all_csv_files():
                 file_response = s3.get_object(Bucket=BUCKET_NAME, Key=csv_file['Key'])
                 csv_content = file_response['Body'].read().decode('utf-8')
                 print(f"CSV content length: {len(csv_content)} characters")
-                print(f"First 200 chars: {csv_content[:200]}")
+                print(f"First 500 chars: {csv_content[:500].replace(chr(10), '\\n')}")
+                
+                # Check if file is empty
+                if not csv_content.strip():
+                    print(f"CSV file {csv_file['Key']} is empty!")
+                    processed_files.append({
+                        'file': csv_file['Key'],
+                        'error': 'File is empty'
+                    })
+                    continue
                 
                 # Process CSV and store in DynamoDB
                 processed_count = process_csv_content(csv_content)
