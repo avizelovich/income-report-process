@@ -73,7 +73,14 @@ class IncomeReportProcessStack(Stack):
                 'CSV_BUCKET_NAME': csv_bucket.bucket_name
             },
             timeout=Duration.minutes(5),
-            memory_size=256
+            memory_size=256,
+            bundling=_lambda.BundlingOptions(
+                external_modules=["requests"],
+                command=[
+                    "bash", "-c", 
+                    "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                ]
+            )
         )
 
         # Grant permissions to Lambda
