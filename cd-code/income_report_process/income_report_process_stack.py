@@ -9,11 +9,11 @@ from aws_cdk import (
     aws_s3_notifications as s3_notifications,
     aws_iam as iam,
     aws_secretsmanager as _secretsmanager,
-    RemovalPolicy
+    RemovalPolicy,
+    BundlingOptions
 )
 from constructs import Construct
 import os
-from aws_cdk import BundlingOptions as _core
 
 class IncomeReportProcessStack(Stack):
 
@@ -70,7 +70,7 @@ class IncomeReportProcessStack(Stack):
             handler="lambda_function.lambda_handler",
             code=_lambda.Code.from_asset(
                 path=os.path.join(os.path.dirname(__file__), "../../lambda-code"),
-                bundling=_core.BundlingOptions(
+                bundling=BundlingOptions(
                     image=_lambda.Runtime.PYTHON_3_11.bundling_image,
                     command=[
                         "bash", "-c", 
