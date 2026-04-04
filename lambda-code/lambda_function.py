@@ -81,8 +81,12 @@ def handle_s3_event(event, context):
 def handle_api_request(event, context):
     """Handle API requests and process CSV files"""
     try:
+        print(f"API Request received: {json.dumps(event)}")
+        
         # Check if this is a processing request
-        if event.get('queryStringParameters', {}).get('action') == 'process':
+        if (event.get('queryStringParameters', {}).get('action') == 'process' or 
+            (event.get('httpMethod') == 'GET' and 
+             event.get('path', '') == '/process')):
             return process_all_csv_files()
         
         # Default: Get expenses from DynamoDB
@@ -105,6 +109,7 @@ def handle_api_request(event, context):
                 'bucket_name': BUCKET_NAME,
                 'instructions': {
                     'process_csv': 'Add ?action=process to process all CSV files in bucket',
+                    'process_csv_alt': 'GET /process to process all CSV files',
                     'upload_csv': f'Upload CSV files to s3://{BUCKET_NAME}/'
                 }
             })
