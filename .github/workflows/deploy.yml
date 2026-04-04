@@ -45,7 +45,7 @@ jobs:
         
     - name: Install AWS CDK
       run: |
-        pip install aws-cdk-lib constructs
+        npm install -g aws-cdk
         
     - name: Bootstrap CDK (if needed)
       run: |
