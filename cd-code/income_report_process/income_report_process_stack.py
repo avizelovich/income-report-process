@@ -1,5 +1,6 @@
 from aws_cdk import (
     Stack,
+    Duration,
     aws_lambda as _lambda,
     aws_apigateway as apigateway,
     aws_dynamodb as dynamodb,
@@ -63,7 +64,7 @@ class IncomeReportProcessStack(Stack):
                 'EXPENSES_TABLE_NAME': expenses_table.table_name,
                 'CSV_BUCKET_NAME': csv_bucket.bucket_name
             },
-            timeout=_lambda.Duration.minutes(5),
+            timeout=Duration.minutes(5),
             memory_size=256
         )
 
