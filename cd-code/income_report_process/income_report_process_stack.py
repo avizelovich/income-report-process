@@ -2,6 +2,9 @@ from aws_cdk import (
     Stack,
     aws_lambda as _lambda,
     aws_apigateway as apigateway,
+    aws_dynamodb as dynamodb,
+    aws_s3 as s3,
+    aws_iam as iam,
     RemovalPolicy
 )
 from constructs import Construct
@@ -12,6 +15,44 @@ class IncomeReportProcessStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        # DynamoDB table for expenses
+        expenses_table = dynamodb.Table(
+            self, "ExpensesTable",
+            table_name="expenses",
+            partition_key=dynamodb.Attribute(
+                name="card_id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="purchase_id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY if os.environ.get('CDK_ENV') == 'dev' else RemovalPolicy.RETAIN,
+            point_in_time_recovery=True
+        )
+
+        # Add GSI for date-purchase queries
+        expenses_table.add_global_secondary_index(
+            index_name="DatePurchaseIndex",
+            partition_key=dynamodb.Attribute(
+                name="date_purchase",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # S3 bucket for CSV files
+        csv_bucket = s3.Bucket(
+            self, "ExpensesCsvBucket",
+            bucket_name="income-report-expenses-csv",
+            removal_policy=RemovalPolicy.DESTROY if os.environ.get('CDK_ENV') == 'dev' else RemovalPolicy.RETAIN,
+            auto_delete_objects=True if os.environ.get('CDK_ENV') == 'dev' else False,
+            versioned=True,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL
+        )
+
         # Lambda function
         lambda_function = _lambda.Function(
             self, "IncomeReportProcessFunction",
@@ -19,9 +60,25 @@ class IncomeReportProcessStack(Stack):
             handler="lambda_function.lambda_handler",
             code=_lambda.Code.from_asset(path=os.path.join(os.path.dirname(__file__), "../../lambda-code")),
             environment={
-                # Add environment variables if needed
-            }
+                'EXPENSES_TABLE_NAME': expenses_table.table_name,
+                'CSV_BUCKET_NAME': csv_bucket.bucket_name
+            },
+            timeout=_lambda.Duration.minutes(5),
+            memory_size=256
         )
+
+        # Grant permissions to Lambda
+        expenses_table.grant_read_write_data(lambda_function)
+        csv_bucket.grant_read(lambda_function)
+        csv_bucket.grant_delete(lambda_function)
+
+        # Add S3 event trigger for CSV files
+        s3_trigger = _lambda.S3EventSource(
+            bucket=csv_bucket,
+            events=[s3.EventType.OBJECT_CREATED],
+            filters=[s3.NotificationKeyFilter(prefix="", suffix=".csv")]
+        )
+        lambda_function.add_event_source(s3_trigger)
 
         # API Gateway
         api = apigateway.RestApi(

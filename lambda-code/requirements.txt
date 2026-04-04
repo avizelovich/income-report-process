@@ -1,1 +1,1 @@
-# No external dependencies required for this simple Lambda function
+boto3==1.34.0
