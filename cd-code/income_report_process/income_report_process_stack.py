@@ -83,7 +83,7 @@ class IncomeReportProcessStack(Stack):
         # Add S3 event trigger for CSV files
         csv_bucket.grant_put(lambda_function)
         csv_bucket.add_object_created_notification(
-            _lambda.S3EventDestination(lambda_function)
+            s3_notifications.LambdaDestination(lambda_function)
         )
 
         # API Gateway
