@@ -79,9 +79,9 @@ class IncomeReportProcessStack(Stack):
         expenses_table.grant_read_write_data(lambda_function)
         csv_bucket.grant_read(lambda_function)
         csv_bucket.grant_delete(lambda_function)
+        csv_bucket.grant_put(lambda_function)
 
         # Add S3 event trigger for CSV files
-        csv_bucket.grant_put(lambda_function)
         csv_bucket.add_object_created_notification(
             s3_notifications.LambdaDestination(lambda_function)
         )
