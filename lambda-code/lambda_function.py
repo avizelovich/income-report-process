@@ -121,7 +121,13 @@ def process_all_csv_files():
         
         # List all CSV files in bucket
         response = s3.list_objects_v2(Bucket=BUCKET_NAME)
-        csv_files = [obj for obj in response.get('Contents', []) if obj['Key'].endswith('.csv')]
+        print(f"S3 response: {json.dumps(response)}")
+        
+        all_objects = response.get('Contents', [])
+        print(f"All objects in bucket: {len(all_objects)}")
+        
+        csv_files = [obj for obj in all_objects if obj['Key'].endswith('.csv')]
+        print(f"CSV files found: {len(csv_files)}")
         
         if not csv_files:
             return {
@@ -132,7 +138,9 @@ def process_all_csv_files():
                 },
                 'body': json.dumps({
                     'message': 'No CSV files found in bucket',
-                    'bucket': BUCKET_NAME
+                    'bucket': BUCKET_NAME,
+                    'all_objects': [obj['Key'] for obj in all_objects],
+                    'debug': 'Check if files have .csv extension'
                 })
             }
         
@@ -146,6 +154,8 @@ def process_all_csv_files():
                 # Get CSV file from S3
                 file_response = s3.get_object(Bucket=BUCKET_NAME, Key=csv_file['Key'])
                 csv_content = file_response['Body'].read().decode('utf-8')
+                print(f"CSV content length: {len(csv_content)} characters")
+                print(f"First 200 chars: {csv_content[:200]}")
                 
                 # Process CSV and store in DynamoDB
                 processed_count = process_csv_content(csv_content)
@@ -186,6 +196,8 @@ def process_csv_content(csv_content):
     """Process CSV content and store in DynamoDB"""
     processed_count = 0
     
+    print(f"Starting CSV processing...")
+    
     # CSV column mapping (Hebrew to English)
     column_mapping = {
         'שם כרטיס': 'card_id',
@@ -199,20 +211,33 @@ def process_csv_content(csv_content):
         'קטגוריה': 'category'  # New column for category
     }
     
+    print(f"Column mapping: {json.dumps(column_mapping)}")
+    
     # Read CSV content
     csv_reader = csv.DictReader(io.StringIO(csv_content))
     
+    # Get field names from CSV
+    field_names = csv_reader.fieldnames
+    print(f"CSV field names: {field_names}")
+    
+    row_count = 0
     for row in csv_reader:
+        row_count += 1
         try:
+            print(f"Processing row {row_count}: {json.dumps(row)}")
+            
             # Map Hebrew columns to English
             mapped_data = {}
             for hebrew_col, english_col in column_mapping.items():
                 if hebrew_col in row and row[hebrew_col].strip():
                     mapped_data[english_col] = row[hebrew_col].strip()
+                    print(f"Mapped {hebrew_col} -> {english_col}: {row[hebrew_col].strip()}")
+            
+            print(f"Mapped data: {json.dumps(mapped_data)}")
             
             # Skip if required fields are missing
             if not mapped_data.get('card_id') or not mapped_data.get('purchase_id'):
-                print(f"Skipping row - missing required fields: {row}")
+                print(f"Skipping row {row_count} - missing required fields. card_id: {mapped_data.get('card_id')}, purchase_id: {mapped_data.get('purchase_id')}")
                 continue
             
             # Clean and format data
@@ -230,6 +255,8 @@ def process_csv_content(csv_content):
                 'source_file': 'csv_upload'
             }
             
+            print(f"Final item to store: {json.dumps(item)}")
+            
             # Store in DynamoDB
             table.put_item(Item=item)
             processed_count += 1
@@ -237,9 +264,10 @@ def process_csv_content(csv_content):
             print(f"Stored item: {item['card_id']} - {item['purchase_id']}")
             
         except Exception as e:
-            print(f"Error processing row {row}: {str(e)}")
+            print(f"Error processing row {row_count} {row}: {str(e)}")
             continue
     
+    print(f"CSV processing complete. Total rows: {row_count}, Processed: {processed_count}")
     return processed_count
 
 def format_date(date_str):
