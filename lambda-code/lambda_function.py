@@ -161,7 +161,8 @@ def process_all_csv_files():
                 file_response = s3.get_object(Bucket=BUCKET_NAME, Key=csv_file['Key'])
                 csv_content = file_response['Body'].read().decode('utf-8')
                 print(f"CSV content length: {len(csv_content)} characters")
-                print(f"First 500 chars: {csv_content[:500].replace(chr(10), '\\n')}")
+                first_500_chars = csv_content[:500].replace('\n', '\\n')
+                print(f"First 500 chars: {first_500_chars}")
                 
                 # Check if file is empty
                 if not csv_content.strip():
