@@ -3,7 +3,7 @@ import os
 import boto3
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 
 # Initialize AWS clients
@@ -17,6 +17,16 @@ BUCKET_NAME = os.environ.get('CSV_BUCKET_NAME')
 # Initialize DynamoDB table
 table = dynamodb.Table(TABLE_NAME)
 
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        elif isinstance(obj, date):
+            return obj.isoformat()
+        elif isinstance(obj, Decimal):
+            return str(obj)
+        return super().default(obj)
+
 def lambda_handler(event, context):
     """
     Lambda function for income report processing
@@ -24,7 +34,7 @@ def lambda_handler(event, context):
     Can be triggered manually or via API Gateway
     """
     try:
-        print(f"Received event: {json.dumps(event)}")
+        print(f"Received event: {json.dumps(event, cls=CustomJSONEncoder)}")
         print(f"Context: {context}")
         
         # Handle API requests (manual trigger)
@@ -38,7 +48,7 @@ def lambda_handler(event, context):
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*'
             },
-            'body': json.dumps({'error': str(e)})
+            'body': json.dumps({'error': str(e)}, cls=CustomJSONEncoder)
         }
 
 def handle_s3_event(event, context):
@@ -71,7 +81,7 @@ def handle_s3_event(event, context):
             'body': json.dumps({
                 'message': f'Successfully processed {len(event["Records"])} CSV files',
                 'processed_records': processed_count
-            })
+            }, cls=CustomJSONEncoder)
         }
         
     except Exception as e:
@@ -81,7 +91,7 @@ def handle_s3_event(event, context):
 def handle_api_request(event, context):
     """Handle API requests and process CSV files"""
     try:
-        print(f"API Request received: {json.dumps(event)}")
+        print(f"API Request received: {json.dumps(event, cls=CustomJSONEncoder)}")
         
         # Check if this is a processing request
         if (event.get('queryStringParameters', {}).get('action') == 'process' or 
@@ -112,7 +122,7 @@ def handle_api_request(event, context):
                     'process_csv_alt': 'GET /process to process all CSV files',
                     'upload_csv': f'Upload CSV files to s3://{BUCKET_NAME}/'
                 }
-            })
+            }, cls=CustomJSONEncoder)
         }
         
     except Exception as e:
@@ -126,7 +136,7 @@ def process_all_csv_files():
         
         # List all CSV files in bucket
         response = s3.list_objects_v2(Bucket=BUCKET_NAME)
-        print(f"S3 response: {json.dumps(response)}")
+        print(f"S3 response: {json.dumps(response, cls=CustomJSONEncoder)}")
         
         all_objects = response.get('Contents', [])
         print(f"All objects in bucket: {len(all_objects)}")
@@ -147,7 +157,7 @@ def process_all_csv_files():
                     'bucket': BUCKET_NAME,
                     'all_objects': [obj['Key'] for obj in all_objects],
                     'debug': 'Check if files have .csv extension'
-                })
+                }, cls=CustomJSONEncoder)
             }
         
         total_processed = 0
@@ -201,7 +211,7 @@ def process_all_csv_files():
                 'message': f'Successfully processed {len(processed_files)} CSV files',
                 'total_records': total_processed,
                 'processed_files': processed_files
-            })
+            }, cls=CustomJSONEncoder)
         }
         
     except Exception as e:
@@ -240,7 +250,7 @@ def process_csv_content(csv_content):
     for row in csv_reader:
         row_count += 1
         try:
-            print(f"Processing row {row_count}: {json.dumps(row)}")
+            print(f"Processing row {row_count}: {json.dumps(row, cls=CustomJSONEncoder)}")
             
             # Map Hebrew columns to English
             mapped_data = {}
@@ -249,7 +259,7 @@ def process_csv_content(csv_content):
                     mapped_data[english_col] = row[hebrew_col].strip()
                     print(f"Mapped {hebrew_col} -> {english_col}: {row[hebrew_col].strip()}")
             
-            print(f"Mapped data: {json.dumps(mapped_data)}")
+            print(f"Mapped data: {json.dumps(mapped_data, cls=CustomJSONEncoder)}")
             
             # Skip if required fields are missing
             if not mapped_data.get('card_id') or not mapped_data.get('purchase_id'):
@@ -271,7 +281,7 @@ def process_csv_content(csv_content):
                 'source_file': 'csv_upload'
             }
             
-            print(f"Final item to store: {json.dumps(item)}")
+            print(f"Final item to store: {json.dumps(item, cls=CustomJSONEncoder)}")
             
             # Store in DynamoDB
             table.put_item(Item=item)
