@@ -285,6 +285,10 @@ def process_csv_content(csv_content):
             business_name = mapped_data.get('business_name', '')
             category_value = mapped_data.get('category', '') or categorize_by_business_name(business_name)
             
+            # Ensure category is never empty for GSI
+            if not category_value or category_value.strip() == '':
+                category_value = 'לא סווג'
+            
             item = {
                 'card_id': mapped_data['card_id'],
                 'purchase_id': mapped_data['purchase_id'],
@@ -294,7 +298,7 @@ def process_csv_content(csv_content):
                 'payment_current': convert_to_decimal(mapped_data.get('payment_current')),
                 'payment_total': convert_to_decimal(mapped_data.get('payment_total')),
                 'purchase_type': mapped_data.get('purchase_type', ''),
-                'category': category_value,  # Auto-categorized if empty
+                'category': category_value,  # Ensure category is never empty
                 'created_at': datetime.utcnow().isoformat(),
                 'source_file': 'csv_upload'
             }
@@ -478,8 +482,8 @@ def categorize_by_business_name(business_name):
             print(f"AI categorization failed: {str(e)}")
             return 'אחר'  # Default if AI fails
     
-    # Return the current category_value (from rule-based or AI)
-    return category_value
+    # Return the determined category (from rule-based or AI)
+    return category_value if category_value else 'לא סווג'
 
 def convert_to_decimal(amount_str):
     """Convert amount string to Decimal and return as string"""
