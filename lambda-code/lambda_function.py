@@ -15,6 +15,7 @@ secrets_manager = boto3.client('secretsmanager')
 # Get environment variables
 TABLE_NAME = os.environ.get('EXPENSES_TABLE_NAME')
 BUCKET_NAME = os.environ.get('CSV_BUCKET_NAME')
+BUSINESS_CATEGORY_TABLE_NAME = os.environ.get('BUSINESS_CATEGORY_TABLE_NAME')
 
 # Get OpenAI API key from Secrets Manager
 OPENAI_API_KEY = None
@@ -29,8 +30,9 @@ except Exception as e:
     print(f"Error retrieving OpenAI API key from Secrets Manager: {str(e)}")
     print("Will use rule-based categorization as fallback")
 
-# Initialize DynamoDB table
+# Initialize DynamoDB tables
 table = dynamodb.Table(TABLE_NAME)
+business_category_table = dynamodb.Table(BUSINESS_CATEGORY_TABLE_NAME)
 
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -283,7 +285,7 @@ def process_csv_content(csv_content):
             
             # Clean and format data
             business_name = mapped_data.get('business_name', '')
-            category_value = mapped_data.get('category', '') or categorize_by_business_name(business_name)
+            category_value = mapped_data.get('category', '') or get_category_from_business_table(business_name)
             
             # Ensure category is never empty for GSI
             if not category_value or category_value.strip() == '':
@@ -341,12 +343,44 @@ def format_date(date_str):
     except Exception:
         return date_str
 
-def categorize_by_business_name(business_name):
-    """Enhanced categorization with multiple strategies"""
+def get_category_from_business_table(business_name):
+    """Get category from business-category table, or add new business if not found"""
     if not business_name:
-        return 'לא סווג'  # Default category
+        return 'לא סווג'
     
-    business_name = business_name.lower().strip()
+    try:
+        # Try to get existing category from business-category table
+        response = business_category_table.get_item(
+            Key={'business_name': business_name}
+        )
+        
+        if 'Item' in response:
+            category = response['Item'].get('category', 'לא סווג')
+            print(f"Found existing category for '{business_name}': {category}")
+            return category
+        else:
+            # Business not found in table, categorize it and add to table
+            print(f"Business '{business_name}' not found in table, categorizing and adding...")
+            category = categorize_business_with_ai(business_name)
+            
+            # Add to business-category table
+            business_category_table.put_item(
+                Item={
+                    'business_name': business_name,
+                    'category': category,
+                    'created_at': datetime.utcnow().isoformat()
+                }
+            )
+            print(f"Added '{business_name}' to business-category table with category: {category}")
+            return category
+            
+    except Exception as e:
+        print(f"Error accessing business-category table: {str(e)}")
+        return categorize_business_with_ai(business_name)
+
+def categorize_business_with_ai(business_name):
+    """Categorize business using AI or rule-based fallback"""
+    business_name_lower = business_name.lower().strip()
     
     # Strategy 1: Direct keyword matching (fastest)
     category_mapping = {
@@ -407,54 +441,11 @@ def categorize_by_business_name(business_name):
     
     # Check exact matches first
     for keyword, category in category_mapping.items():
-        if keyword in business_name:
+        if keyword in business_name_lower:
             return category
     
-    # Strategy 2: Partial matching (fuzzy)
-    if any(word in business_name for word in ['מסעד', 'אוכל', 'קפה']):
-        return 'מזון תשלומים'
-    elif any(word in business_name for word in ['תדל', 'דלק', 'פז']):
-        return 'תחבורה ורכב'
-    elif any(word in business_name for word in ['מכול', 'סופר', 'שוק', 'רשת']):
-        return 'קניות ורכישים'
-    elif any(word in business_name for word in ['אוטובוס', 'מונית', 'רכב']):
-        return 'תחבורה'
-    elif any(word in business_name for word in ['רופא', 'בית חולים', 'פרמציה']):
-        return 'בריאות'
-    elif any(word in business_name for word in ['בנק', 'אשראי']):
-        return 'בנקאות ופיננסים'
-    
-    # Strategy 3: Pattern matching (sophisticated)
-    import re
-    
-    # Restaurant patterns
-    if re.search(r'(מסעד|קפה|שופ|בית.*קפה|רשת|בר|קפה)', business_name):
-        return 'מזון תשלומים'
-    
-    # Gas station patterns  
-    elif re.search(r'(תדל|דלק|פז|סונת|בנז)', business_name):
-        return 'תחבורה ורכב'
-    
-    # Shopping patterns
-    elif re.search(r'(מכול|סופר|שוק|רשת.*קמח|איקאי|ייבוא|זאפ)', business_name):
-        return 'קניות ורכישים'
-    
-    # Transportation patterns
-    elif re.search(r'(אוטובוס|מונית|רכב|אוטובוס)', business_name):
-        return 'תחבורה'
-    
-    # Health patterns
-    elif re.search(r'(רופא|בית.*חולים|פרמציה|מרפאה|קופת.*חולים)', business_name):
-        return 'בריאות'
-    
-    # Bank patterns
-    elif re.search(r'(בנק|אשראי|המרכז|כרטיס)', business_name):
-        return 'בנקאות ופיננסים'
-    
-    # Strategy 4: AI/ML (OpenAI integration) - Only for uncategorized items
-    category_value = 'אחר'  # Default category
-    
-    if OPENAI_API_KEY and business_name:
+    # Strategy 2: AI categorization for unknown businesses
+    if OPENAI_API_KEY:
         try:
             response = requests.post(
                 'https://api.openai.com/v1/chat/completions',
@@ -521,14 +512,13 @@ def categorize_by_business_name(business_name):
                     'אחר': 'אחר'
                 }
                 
-                category_value = ai_mapping.get(ai_category, 'אחר')
+                return ai_mapping.get(ai_category, 'אחר')
             
         except Exception as e:
             print(f"AI categorization failed: {str(e)}")
-            category_value = 'אחר'  # Default if AI fails
     
-    # Return the determined category (from rule-based or AI)
-    return category_value if category_value else 'לא סווג'
+    # Default category
+    return 'אחר'
 
 def convert_to_decimal(amount_str):
     """Convert amount string to Decimal and return as string"""

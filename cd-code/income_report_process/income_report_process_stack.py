@@ -32,29 +32,24 @@ class IncomeReportProcessStack(Stack):
                 name="purchase_id",
                 type=dynamodb.AttributeType.STRING
             ),
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=RemovalPolicy.DESTROY if os.environ.get('CDK_ENV') == 'dev' else RemovalPolicy.RETAIN,
-            point_in_time_recovery=True
+            removal_policy=RemovalPolicy.DESTROY,
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST
         )
 
-        # Add GSI for date-purchase queries
-        expenses_table.add_global_secondary_index(
-            index_name="DatePurchaseIndex",
-            partition_key=dynamodb.Attribute(
-                name="date_purchase",
-                type=dynamodb.AttributeType.STRING
-            ),
-            projection_type=dynamodb.ProjectionType.ALL
-        )
-
-        # Add GSI for category queries
+        # Add Global Secondary Index for category
         expenses_table.add_global_secondary_index(
             index_name="CategoryIndex",
-            partition_key=dynamodb.Attribute(
-                name="category",
-                type=dynamodb.AttributeType.STRING
-            ),
+            partition_key=dynamodb.Attribute(name="category", type=dynamodb.AttributeType.STRING),
             projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # DynamoDB table for business categories
+        business_category_table = dynamodb.Table(
+            self, "BusinessCategoryTable",
+            table_name="business-category",
+            partition_key=dynamodb.Attribute(name="business_name", type=dynamodb.AttributeType.STRING),
+            removal_policy=RemovalPolicy.DESTROY,
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST
         )
 
         # S3 bucket for CSV files (use existing bucket)
@@ -80,7 +75,8 @@ class IncomeReportProcessStack(Stack):
             ),
             environment={
                 'EXPENSES_TABLE_NAME': expenses_table.table_name,
-                'CSV_BUCKET_NAME': csv_bucket.bucket_name
+                'CSV_BUCKET_NAME': csv_bucket.bucket_name,
+                'BUSINESS_CATEGORY_TABLE_NAME': business_category_table.table_name
             },
             timeout=Duration.minutes(15),  # Increased timeout for AI processing
             memory_size=512  # Increased memory for AI processing
@@ -88,6 +84,7 @@ class IncomeReportProcessStack(Stack):
 
         # Grant permissions to Lambda
         expenses_table.grant_read_write_data(lambda_function)
+        business_category_table.grant_read_write_data(lambda_function)
         csv_bucket.grant_read(lambda_function)
         csv_bucket.grant_delete(lambda_function)
         csv_bucket.grant_put(lambda_function)
