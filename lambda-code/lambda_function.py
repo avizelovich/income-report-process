@@ -122,7 +122,8 @@ def process_csv_content(csv_content):
         'סכום חיוב בש''ח': 'payment_current',
         'סכום קנייה': 'payment_total',
         'אסמכתא': 'purchase_id',
-        'תאור סוג עסקת אשראי': 'purchase_type'
+        'תאור סוג עסקת אשראי': 'purchase_type',
+        'קטגוריה': 'category'  # New column for category
     }
     
     # Read CSV content
@@ -151,6 +152,7 @@ def process_csv_content(csv_content):
                 'payment_current': convert_to_decimal(mapped_data.get('payment_current')),
                 'payment_total': convert_to_decimal(mapped_data.get('payment_total')),
                 'purchase_type': mapped_data.get('purchase_type', ''),
+                'category': mapped_data.get('category', ''),  # New category field
                 'created_at': datetime.utcnow().isoformat(),
                 'source_file': 'csv_upload'
             }

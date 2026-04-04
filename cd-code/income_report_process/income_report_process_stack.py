@@ -44,6 +44,16 @@ class IncomeReportProcessStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
+        # Add GSI for category queries
+        expenses_table.add_global_secondary_index(
+            index_name="CategoryIndex",
+            partition_key=dynamodb.Attribute(
+                name="category",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
         # S3 bucket for CSV files
         csv_bucket = s3.Bucket(
             self, "ExpensesCsvBucket",

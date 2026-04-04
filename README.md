@@ -35,9 +35,11 @@ A comprehensive AWS Lambda function for income report processing that reads CSV 
 - `payment_total` - Total purchase amount (from "סכום קנייה")
 - `purchase_id` - Purchase authorization (from "אסמכתא")
 - `purchase_type` - Purchase type description (from "תאור סוג עסקת אשראי")
+- `category` - Expense category (from "קטגוריה")
 
-### Global Secondary Index:
+### Global Secondary Indexes:
 - **DatePurchaseIndex**: `date_purchase` as partition key
+- **CategoryIndex**: `category` as partition key
 
 ## CSV Column Mapping
 
@@ -51,6 +53,7 @@ A comprehensive AWS Lambda function for income report processing that reads CSV 
 | סכום קנייה | payment_total | Total purchase amount |
 | אסמכתא | purchase_id | Purchase authorization |
 | תאור סוג עסקת אשראי | purchase_type | Purchase type description |
+| קטגוריה | category | Expense category |
 
 ## Usage
 
@@ -63,8 +66,9 @@ Upload CSV files with Hebrew headers to the S3 bucket `income-report-expenses-cs
 
 ### 3. Sample CSV Format
 ```csv
-שם כרטיס,תאריך,חיוב לתאריך,שם בית עסק,סכום חיוב בש''ח,סכום קנייה,אסמכתא,תאור סוג עסקת אשראי
-ויזה כרטיס אשראי,01/04/2026,02/04/2026,חנות מכולת,50.25,45.50,123456,רכישה רגילה
+שם כרטיס,תאריך,חיוב לתאריך,שם בית עסק,סכום חיוב בש''ח,סכום קנייה,אסמכתא,תאור סוג עסקת אשראי,קטגוריה
+ויזה כרטיס אשראי,01/04/2026,02/04/2026,חנות מכולת,50.25,45.50,123456,רכישה רגילה,מזון תשלומים
+מסטרקרד,15/04/2026,16/04/2026,תדלאן דלק,120.00,115.50,789012,תדלית,מזון עבודה
 ```
 
 ## Local Development
