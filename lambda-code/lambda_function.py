@@ -263,8 +263,8 @@ def process_csv_content(csv_content):
                 'date_purchase': format_date(mapped_data.get('date_purchase')),
                 'date_charging': format_date(mapped_data.get('date_charging')),
                 'business_name': mapped_data.get('business_name', ''),
-                'payment_current': str(convert_to_decimal(mapped_data.get('payment_current'))),
-                'payment_total': str(convert_to_decimal(mapped_data.get('payment_total'))),
+                'payment_current': convert_to_decimal(mapped_data.get('payment_current')),
+                'payment_total': convert_to_decimal(mapped_data.get('payment_total')),
                 'purchase_type': mapped_data.get('purchase_type', ''),
                 'category': mapped_data.get('category', ''),  # New category field
                 'created_at': datetime.utcnow().isoformat(),
@@ -310,7 +310,7 @@ def format_date(date_str):
         return date_str
 
 def convert_to_decimal(amount_str):
-    """Convert amount string to Decimal"""
+    """Convert amount string to Decimal and return as string"""
     if not amount_str or amount_str.strip() == '':
         return None
     
@@ -318,8 +318,8 @@ def convert_to_decimal(amount_str):
         # Remove currency symbols, commas, and spaces
         cleaned = amount_str.replace('₪', '').replace('$', '').replace(',', '').strip()
         
-        # Convert to Decimal
-        return Decimal(cleaned)
+        # Convert to Decimal and then to string
+        return str(Decimal(cleaned))
         
     except Exception:
         return None
