@@ -21,16 +21,13 @@ def lambda_handler(event, context):
     """
     Lambda function for income report processing
     Processes CSV files from S3 and stores them in DynamoDB
+    Can be triggered manually or via API Gateway
     """
     try:
         print(f"Received event: {json.dumps(event)}")
         print(f"Context: {context}")
         
-        # Handle S3 event trigger
-        if 'Records' in event:
-            return handle_s3_event(event, context)
-        
-        # Handle direct API requests
+        # Handle API requests (manual trigger)
         return handle_api_request(event, context)
         
     except Exception as e:
@@ -82,9 +79,13 @@ def handle_s3_event(event, context):
         raise
 
 def handle_api_request(event, context):
-    """Handle direct API requests"""
+    """Handle API requests and process CSV files"""
     try:
-        # Example: Get expenses from DynamoDB
+        # Check if this is a processing request
+        if event.get('queryStringParameters', {}).get('action') == 'process':
+            return process_all_csv_files()
+        
+        # Default: Get expenses from DynamoDB
         response = table.scan(
             Limit=10
         )
@@ -101,12 +102,84 @@ def handle_api_request(event, context):
                 'message': 'Income report processing Lambda is working',
                 'expenses': response.get('Items', []),
                 'table_name': TABLE_NAME,
-                'bucket_name': BUCKET_NAME
+                'bucket_name': BUCKET_NAME,
+                'instructions': {
+                    'process_csv': 'Add ?action=process to process all CSV files in bucket',
+                    'upload_csv': f'Upload CSV files to s3://{BUCKET_NAME}/'
+                }
             })
         }
         
     except Exception as e:
         print(f"Error handling API request: {str(e)}")
+        raise
+
+def process_all_csv_files():
+    """Process all CSV files in the S3 bucket"""
+    try:
+        print(f"Processing CSV files from bucket: {BUCKET_NAME}")
+        
+        # List all CSV files in bucket
+        response = s3.list_objects_v2(Bucket=BUCKET_NAME)
+        csv_files = [obj for obj in response.get('Contents', []) if obj['Key'].endswith('.csv')]
+        
+        if not csv_files:
+            return {
+                'statusCode': 200,
+                'headers': {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                'body': json.dumps({
+                    'message': 'No CSV files found in bucket',
+                    'bucket': BUCKET_NAME
+                })
+            }
+        
+        total_processed = 0
+        processed_files = []
+        
+        for csv_file in csv_files:
+            try:
+                print(f"Processing file: {csv_file['Key']}")
+                
+                # Get CSV file from S3
+                file_response = s3.get_object(Bucket=BUCKET_NAME, Key=csv_file['Key'])
+                csv_content = file_response['Body'].read().decode('utf-8')
+                
+                # Process CSV and store in DynamoDB
+                processed_count = process_csv_content(csv_content)
+                total_processed += processed_count
+                processed_files.append({
+                    'file': csv_file['Key'],
+                    'records_processed': processed_count
+                })
+                
+                print(f"Successfully processed {processed_count} records from {csv_file['Key']}")
+                
+            except Exception as e:
+                print(f"Error processing file {csv_file['Key']}: {str(e)}")
+                processed_files.append({
+                    'file': csv_file['Key'],
+                    'error': str(e)
+                })
+                continue
+        
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            },
+            'body': json.dumps({
+                'message': f'Successfully processed {len(processed_files)} CSV files',
+                'total_records': total_processed,
+                'processed_files': processed_files
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error processing CSV files: {str(e)}")
         raise
 
 def process_csv_content(csv_content):

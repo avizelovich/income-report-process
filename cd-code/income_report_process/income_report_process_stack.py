@@ -81,11 +81,6 @@ class IncomeReportProcessStack(Stack):
         csv_bucket.grant_delete(lambda_function)
         csv_bucket.grant_put(lambda_function)
 
-        # Add S3 event trigger for CSV files
-        csv_bucket.add_object_created_notification(
-            s3_notifications.LambdaDestination(lambda_function)
-        )
-
         # API Gateway
         api = apigateway.RestApi(
             self, "IncomeReportProcessApi",
