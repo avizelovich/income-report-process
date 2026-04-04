@@ -267,6 +267,8 @@ def process_csv_content(csv_content):
                 continue
             
             # Clean and format data
+            category_value = mapped_data.get('category', '') or 'לא סווג'  # Default category if empty
+            
             item = {
                 'card_id': mapped_data['card_id'],
                 'purchase_id': mapped_data['purchase_id'],
@@ -276,7 +278,7 @@ def process_csv_content(csv_content):
                 'payment_current': convert_to_decimal(mapped_data.get('payment_current')),
                 'payment_total': convert_to_decimal(mapped_data.get('payment_total')),
                 'purchase_type': mapped_data.get('purchase_type', ''),
-                'category': mapped_data.get('category', ''),  # New category field
+                'category': category_value,  # Ensure category is never empty
                 'created_at': datetime.utcnow().isoformat(),
                 'source_file': 'csv_upload'
             }
