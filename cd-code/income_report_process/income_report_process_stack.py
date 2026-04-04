@@ -13,6 +13,7 @@ from aws_cdk import (
 )
 from constructs import Construct
 import os
+from aws_cdk import BundlingOptions as _core
 
 class IncomeReportProcessStack(Stack):
 
@@ -67,20 +68,22 @@ class IncomeReportProcessStack(Stack):
             self, "IncomeReportProcessFunction",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="lambda_function.lambda_handler",
-            code=_lambda.Code.from_asset(path=os.path.join(os.path.dirname(__file__), "../../lambda-code")),
+            code=_lambda.Code.from_asset(
+                path=os.path.join(os.path.dirname(__file__), "../../lambda-code"),
+                bundling=_core.BundlingOptions(
+                    image=_lambda.Runtime.PYTHON_3_11.bundling_image,
+                    command=[
+                        "bash", "-c", 
+                        "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                    ]
+                )
+            ),
             environment={
                 'EXPENSES_TABLE_NAME': expenses_table.table_name,
                 'CSV_BUCKET_NAME': csv_bucket.bucket_name
             },
             timeout=Duration.minutes(5),
-            memory_size=256,
-            bundling=_lambda.BundlingOptions(
-                external_modules=["requests"],
-                command=[
-                    "bash", "-c", 
-                    "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output"
-                ]
-            )
+            memory_size=256
         )
 
         # Grant permissions to Lambda
