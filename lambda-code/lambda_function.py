@@ -344,7 +344,7 @@ def format_date(date_str):
         return date_str
 
 def get_category_from_business_table(business_name):
-    """Get category from business-category table, or add new business if not found"""
+    """Get category from business-category table, or add new business as PENDING if not found"""
     if not business_name:
         return 'לא סווג'
     
@@ -356,14 +356,24 @@ def get_category_from_business_table(business_name):
         
         if 'Item' in response:
             category = response['Item'].get('category', 'לא סווג')
+            if not category or category.strip() == '':
+                print(f"Business '{business_name}' found but has empty category, marking as PENDING")
+                # Update with PENDING category
+                business_category_table.update_item(
+                    Key={'business_name': business_name},
+                    UpdateExpression='set #category = :category',
+                    ExpressionAttributeValues={':category': 'PENDING'}
+                )
+                return 'PENDING'
+            
             print(f"Found existing category for '{business_name}': {category}")
             return category
         else:
-            # Business not found in table, categorize it and add to table
-            print(f"Business '{business_name}' not found in table, categorizing and adding...")
-            category = categorize_business_with_ai(business_name)
+            # Business not found in table, add as PENDING
+            print(f"Business '{business_name}' not found in table, adding as PENDING...")
+            category = 'PENDING'
             
-            # Add to business-category table
+            # Add to business-category table with PENDING status
             business_category_table.put_item(
                 Item={
                     'business_name': business_name,
@@ -376,149 +386,8 @@ def get_category_from_business_table(business_name):
             
     except Exception as e:
         print(f"Error accessing business-category table: {str(e)}")
-        return categorize_business_with_ai(business_name)
+        return 'PENDING'
 
-def categorize_business_with_ai(business_name):
-    """Categorize business using AI or rule-based fallback"""
-    business_name_lower = business_name.lower().strip()
-    
-    # Strategy 1: Direct keyword matching (fastest)
-    category_mapping = {
-        # Food & Restaurants
-        'מסעדן': 'מזון תשלומים', 'קפה': 'מזון תשלומים', 'מסעדת': 'מזון תשלומים',
-        'שופ': 'מזון תשלומים', 'בית קפה': 'מזון תשלומים', 'רשת': 'מזון תשלומים',
-        'בר': 'מזון תשלומים', 'מסעדה': 'מזון תשלומים', 'מאפיה': 'מזון תשלומים',
-        'גלידריה': 'מזון תשלומים', 'פיצריה': 'מזון תשלומים', 'סושי': 'מזון תשלומים',
-        
-        # Gas & Fuel
-        'תדלן': 'תחבורה ורכב', 'דלק': 'תחבורה ורכב', 'פז': 'תחבורה ורכב',
-        'סונת': 'תחבורה ורכב', 'בנזין': 'תחבורה ורכב', 'חניון': 'תחבורה ורכב',
-        'parking': 'תחבורה ורכב', 'חניה': 'תחבורה ורכב',
-        
-        # Shopping & Retail
-        'מכולת': 'קניות ורכישים', 'סופר': 'קניות ורכישים', 'שוק': 'קניות ורכישים',
-        'רשת קמח': 'קניות ורכישים', 'איקאי': 'קניות ורכישים', 'ייבוא': 'קניות ורכישים',
-        'זאפ': 'קניות ורכישים', 'שופרסל': 'קניות ורכישים', 'מגה': 'קניות ורכישים',
-        'ויקטוריה': 'קניות ורכישים', 'סטיילש': 'קניות ורכישים', 'השישי': 'קניות ורכישים',
-        'פוקס': 'קניות ורכישים', 'בי וואי': 'קניות ורכישים', 'אופיס': 'קניות ורכישים',
-        
-        # Banks & Financial
-        'בנק': 'בנקאות ופיננסים', 'אשראי': 'בנקאות ופיננסים', 'המרכז': 'בנקאות ופיננסים',
-        'כרטיס': 'בנקאות ופיננסים', 'הפועלים': 'בנקאות ופיננסים', 'לאומי': 'בנקאות ופיננסים',
-        'דיסקונט': 'בנקאות ופיננסים', 'מזרחי': 'בנקאות ופיננסים',
-        
-        # Education
-        'matific': 'חינוך', 'אוניברסיטה': 'חינוך', 'קורס': 'חינוך', 'ספר': 'חינוך',
-        'מכללה': 'חינוך', 'גן': 'חינוך', 'בית ספר': 'חינוך', 'חוג': 'חינוך',
-        
-        # Entertainment & Streaming
-        'netflix': 'פנאי ובידור', 'hot': 'פנאי ובידור', 'yes': 'פנאי ובידור',
-        'סטרימינג': 'פנאי ובידור', 'קולנוע': 'פנאי ובידור', 'סרט': 'פנאי ובידור',
-        'תיאטרון': 'פנאי ובידור', 'הופעה': 'פנאי ובידור', 'ספורט': 'פנאי ובידור',
-        
-        # Bills & Utilities
-        'חשמל': 'חשבונות ותשלומים', 'מים': 'חשבונות ותשלומים', 'ארנונה': 'חשבונות ותשלומים',
-        'טלפון': 'חשבונות ותשלומים', 'אינטרנט': 'חשבונות ותשלומים', 'סלולר': 'חשבונות ותשלומים',
-        'בזר': 'חשבונות ותשלומים', 'גז': 'חשבונות ותשלומים', 'ביטוח': 'חשבונות ותשלומים',
-        
-        # Health
-        'רופא': 'בריאות', 'פרמציה': 'בריאות', 'בית חולים': 'בריאות', 'מרפאה': 'בריאות',
-        'קופת חולים': 'בריאות', 'מכבי': 'בריאות', 'מאוחדת': 'בריאות', 'לאומית': 'בריאות',
-        'ויטמין': 'בריאות', 'תרופה': 'בריאות',
-        
-        # Transportation
-        'אוטובוס': 'תחבורה', 'מונית': 'תחבורה', 'רכבת': 'תחבורה', 'דן': 'תחבורה',
-        'אגד': 'תחבורה', 'מטרופולין': 'תחבורה', 'קו': 'תחבורה',
-        
-        # Home & Maintenance
-        'הום סנטר': 'תחזוקה וביטחון', 'אשכול': 'תחזוקה וביטחון', 'צבע': 'תחזוקה וביטחון',
-        'חשמלאי': 'תחזוקה וביטחון', 'שרברב': 'תחזוקה וביטחון', 'ניקיון': 'תחזוקה וביטחון',
-        
-        # Travel
-        'מלון': 'נסיעות', 'טיסה': 'נסיעות', 'אל על': 'נסיעות', 'ארקיע': 'נסיעות',
-        'השכרת רכב': 'נסיעות', 'בודג': 'נסיעות', 'איירבנדר': 'נסיעות',
-    }
-    
-    # Check exact matches first
-    for keyword, category in category_mapping.items():
-        if keyword in business_name_lower:
-            return category
-    
-    # Strategy 2: AI categorization for unknown businesses
-    if OPENAI_API_KEY:
-        try:
-            response = requests.post(
-                'https://api.openai.com/v1/chat/completions',
-                headers={
-                    'Authorization': f'Bearer {OPENAI_API_KEY}',
-                    'Content-Type': 'application/json'
-                },
-                json={
-                    'model': 'gpt-3.5-turbo',
-                    'messages': [
-                        {
-                            'role': 'system', 
-                            'content': '''אתה מומחה לקטגוריית הוצאות פיננסיות בישראל. עליך לסווג את שם העסק לאחת מהקטגוריות הבאות עם דיוק מרבי:
-
-מזון תשלומים - מסעדות, בתי קפה, מזון מהיר, קפיטריות, בתי מרקחת, קפה, ברים, מאפיות, גלידריות
-תחבורה ורכב - תחנות דלק, חניונים, תחבורה ציבורית, מוניות, אוטובוסים, רכב, חלפי רכב
-קניות ורכישים - סופרמרקטים, מכולות, חנויות נוחות, מרכזי קניות, חנויות בגדים, אלקטרוניקה, רהיטים
-תחבורה - תחבורה ציבורית, מוניות, אוטובוסים, רכבות, רכבת ישראל, נמל תעופה
-בריאות - בתי מרקחת, רופאים, מרפאות, בתי חולים, קופות חולים, ציוד רפואי, ויטמינים
-פנאי ובידור - סטרימינג (נטפליקס, הוט), קולנוע, תיאטרון, ספורט, מועדונים, פארקים, פעילויות פנאי
-חשבונות ותשלומים - חשבונות חשמל, מים, ארנונה, טלפון, אינטרנט, סלולר, גז, ביטוח
-חינוך - מוסדות חינוך, קורסים, ספרים, ציוד לימוד, חוגים, אוניברסיטאות, גני ילדים
-תחזוקה וביטחון - תיקוני בית, חשמלאי, שרברב, ניקיון, חומרי בניין, ציוד ביטחון
-נסיעות - מלונות, טיסות, דירות נופש, סוכנויות נסיעות, השכרת רכב
-בנקאות ופיננסים - בנקים, עמלות העברה, שירותים פיננסיים, אשראי, כרטיסי אשראי
-אחר - כל מה שלא מתאים לקטגוריות האחרות
-
-דוגמאות לסיווג:
-- MATIFIC -> חינוך (פלטפורמת למידה)
-- NETFLIX.COM -> פנאי ובידור (סטרימינג)
-- פז -> תחבורה ורכב (תחנת דלק)
-- שופרסל -> קניות ורכישים (סופרמרקט)
-- המרכז -> בנקאות ופיננסים (בנק)
-
-החזר רק את שם הקטגוריה המדויק בעברית מהרשימה למעלה.'''
-                        },
-                        {
-                            'role': 'user', 
-                            'content': f'שם העסק: {business_name}'
-                        }
-                    ],
-                    'max_tokens': 50,
-                    'temperature': 0.1
-                }
-            )
-            
-            if response.status_code == 200:
-                ai_category = response.json()['choices'][0]['message']['content'].strip()
-                print(f"AI categorized '{business_name}' as '{ai_category}'")
-                
-                # Map AI response to our standard categories
-                ai_mapping = {
-                    'מזון תשלומים': 'מזון תשלומים',
-                    'תחבורה ורכב': 'תחבורה ורכב',
-                    'קניות ורכישים': 'קניות ורכישים',
-                    'תחבורה': 'תחבורה',
-                    'בריאות': 'בריאות',
-                    'פנאי ובידור': 'פנאי ובידור',
-                    'חשבונות ותשלומים': 'חשבונות ותשלומים',
-                    'חינוך': 'חינוך',
-                    'תחזוקה וביטחון': 'תחזוקה וביטחון',
-                    'נסיעות': 'נסיעות',
-                    'בנקאות ופיננסים': 'בנקאות ופיננסים',
-                    'אחר': 'אחר'
-                }
-                
-                return ai_mapping.get(ai_category, 'אחר')
-            
-        except Exception as e:
-            print(f"AI categorization failed: {str(e)}")
-    
-    # Default category
-    return 'אחר'
 
 def convert_to_decimal(amount_str):
     """Convert amount string to Decimal and return as string"""
