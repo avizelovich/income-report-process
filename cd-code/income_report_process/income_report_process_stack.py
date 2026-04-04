@@ -5,6 +5,7 @@ from aws_cdk import (
     aws_apigateway as apigateway,
     aws_dynamodb as dynamodb,
     aws_s3 as s3,
+    aws_s3_notifications as s3_notifications,
     aws_iam as iam,
     RemovalPolicy
 )
@@ -74,7 +75,7 @@ class IncomeReportProcessStack(Stack):
         csv_bucket.grant_delete(lambda_function)
 
         # Add S3 event trigger for CSV files
-        s3_trigger = _lambda.S3EventSource(
+        s3_trigger = s3_notifications.S3EventSource(
             bucket=csv_bucket,
             events=[s3.EventType.OBJECT_CREATED],
             filters=[s3.NotificationKeyFilter(prefix="", suffix=".csv")]
