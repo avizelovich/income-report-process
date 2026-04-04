@@ -416,7 +416,9 @@ def categorize_by_business_name(business_name):
         return 'בנקאות ופיננסים'
     
     # Strategy 4: AI/ML (OpenAI integration) - Only for uncategorized items
-    if OPENAI_API_KEY and business_name and category_value == 'אחר':
+    category_value = 'אחר'  # Default category
+    
+    if OPENAI_API_KEY and business_name:
         try:
             response = requests.post(
                 'https://api.openai.com/v1/chat/completions',
@@ -476,11 +478,11 @@ def categorize_by_business_name(business_name):
                     'אחר': 'אחר'
                 }
                 
-                return ai_mapping.get(ai_category, 'אחר')
+                category_value = ai_mapping.get(ai_category, 'אחר')
             
         except Exception as e:
             print(f"AI categorization failed: {str(e)}")
-            return 'אחר'  # Default if AI fails
+            category_value = 'אחר'  # Default if AI fails
     
     # Return the determined category (from rule-based or AI)
     return category_value if category_value else 'לא סווג'
