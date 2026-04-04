@@ -411,8 +411,8 @@ def categorize_by_business_name(business_name):
     elif re.search(r'(בנק|אשראי|המרכז|כרטיס)', business_name):
         return 'בנקאות ופיננסים'
     
-    # Strategy 4: AI/ML (OpenAI integration)
-    if OPENAI_API_KEY and business_name:
+    # Strategy 4: AI/ML (OpenAI integration) - Only for uncategorized items
+    if OPENAI_API_KEY and business_name and category_value == 'אחר':
         try:
             response = requests.post(
                 'https://api.openai.com/v1/chat/completions',
@@ -477,6 +477,9 @@ def categorize_by_business_name(business_name):
         except Exception as e:
             print(f"AI categorization failed: {str(e)}")
             return 'אחר'  # Default if AI fails
+    
+    # Return the current category_value (from rule-based or AI)
+    return category_value
 
 def convert_to_decimal(amount_str):
     """Convert amount string to Decimal and return as string"""

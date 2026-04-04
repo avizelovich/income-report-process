@@ -82,8 +82,8 @@ class IncomeReportProcessStack(Stack):
                 'EXPENSES_TABLE_NAME': expenses_table.table_name,
                 'CSV_BUCKET_NAME': csv_bucket.bucket_name
             },
-            timeout=Duration.minutes(5),
-            memory_size=256
+            timeout=Duration.minutes(15),  # Increased timeout for AI processing
+            memory_size=512  # Increased memory for AI processing
         )
 
         # Grant permissions to Lambda
