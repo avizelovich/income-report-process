@@ -3,16 +3,31 @@ import os
 import boto3
 import csv
 import io
+import requests  # For OpenAI API
 from datetime import datetime, date
 from decimal import Decimal
 
 # Initialize AWS clients
 dynamodb = boto3.resource('dynamodb')
 s3 = boto3.client('s3')
+secrets_manager = boto3.client('secretsmanager')
 
 # Get environment variables
 TABLE_NAME = os.environ.get('EXPENSES_TABLE_NAME')
 BUCKET_NAME = os.environ.get('CSV_BUCKET_NAME')
+
+# Get OpenAI API key from Secrets Manager
+OPENAI_API_KEY = None
+try:
+    secret_response = secrets_manager.get_secret_value(
+        SecretId='openai-api-key'
+    )
+    secret_data = json.loads(secret_response['SecretString'])
+    OPENAI_API_KEY = secret_data.get('api-key')
+    print(f"Successfully retrieved OpenAI API key from Secrets Manager")
+except Exception as e:
+    print(f"Error retrieving OpenAI API key from Secrets Manager: {str(e)}")
+    print("Will use rule-based categorization as fallback")
 
 # Initialize DynamoDB table
 table = dynamodb.Table(TABLE_NAME)
@@ -267,18 +282,19 @@ def process_csv_content(csv_content):
                 continue
             
             # Clean and format data
-            category_value = mapped_data.get('category', '') or 'לא סווג'  # Default category if empty
+            business_name = mapped_data.get('business_name', '')
+            category_value = mapped_data.get('category', '') or categorize_by_business_name(business_name)
             
             item = {
                 'card_id': mapped_data['card_id'],
                 'purchase_id': mapped_data['purchase_id'],
                 'date_purchase': format_date(mapped_data.get('date_purchase')),
                 'date_charging': format_date(mapped_data.get('date_charging')),
-                'business_name': mapped_data.get('business_name', ''),
+                'business_name': business_name,
                 'payment_current': convert_to_decimal(mapped_data.get('payment_current')),
                 'payment_total': convert_to_decimal(mapped_data.get('payment_total')),
                 'purchase_type': mapped_data.get('purchase_type', ''),
-                'category': category_value,  # Ensure category is never empty
+                'category': category_value,  # Auto-categorized if empty
                 'created_at': datetime.utcnow().isoformat(),
                 'source_file': 'csv_upload'
             }
@@ -320,6 +336,147 @@ def format_date(date_str):
         
     except Exception:
         return date_str
+
+def categorize_by_business_name(business_name):
+    """Enhanced categorization with multiple strategies"""
+    if not business_name:
+        return 'לא סווג'  # Default category
+    
+    business_name = business_name.lower().strip()
+    
+    # Strategy 1: Direct keyword matching (fastest)
+    category_mapping = {
+        # Food & Restaurants
+        'מסעדן': 'מזון תשלומים', 'קפה': 'מזון תשלומים', 'מסעדת': 'מזון תשלומים',
+        'שופ': 'מזון תשלומים', 'בית קפה': 'מזון תשלומים', 'רשת': 'מזון תשלומים',
+        'בר': 'מזון תשלומים', 'קפה': 'מזון תשלומים',
+        
+        # Gas & Fuel
+        'תדלן': 'תחבורה ורכב', 'דלק': 'תחבורה ורכב', 'פז': 'תחבורה ורכב',
+        'סונת': 'תחבורה ורכב', 'בנזין': 'תחבורה ורכב',
+        
+        # Shopping & Retail
+        'מכולת': 'קניות ורכישים', 'סופר': 'קניות ורכישים', 'שוק': 'קניות ורכישים',
+        'רשת קמח': 'קניות ורכישים', 'איקאי': 'קניות ורכישים', 'ייבוא': 'קניות ורכישים',
+        'זאפ': 'קניות ורכישים',
+        
+        # Banks & Financial
+        'בנק': 'בנקאות ופיננסים', 'אשראי': 'בנקאות ופיננסים', 'המרכז': 'בנקאות ופיננסים',
+        'כרטיס': 'בנקאות ופיננסים',
+    }
+    
+    # Check exact matches first
+    for keyword, category in category_mapping.items():
+        if keyword in business_name:
+            return category
+    
+    # Strategy 2: Partial matching (fuzzy)
+    if any(word in business_name for word in ['מסעד', 'אוכל', 'קפה']):
+        return 'מזון תשלומים'
+    elif any(word in business_name for word in ['תדל', 'דלק', 'פז']):
+        return 'תחבורה ורכב'
+    elif any(word in business_name for word in ['מכול', 'סופר', 'שוק', 'רשת']):
+        return 'קניות ורכישים'
+    elif any(word in business_name for word in ['אוטובוס', 'מונית', 'רכב']):
+        return 'תחבורה'
+    elif any(word in business_name for word in ['רופא', 'בית חולים', 'פרמציה']):
+        return 'בריאות'
+    elif any(word in business_name for word in ['בנק', 'אשראי']):
+        return 'בנקאות ופיננסים'
+    
+    # Strategy 3: Pattern matching (sophisticated)
+    import re
+    
+    # Restaurant patterns
+    if re.search(r'(מסעד|קפה|שופ|בית.*קפה|רשת|בר|קפה)', business_name):
+        return 'מזון תשלומים'
+    
+    # Gas station patterns  
+    elif re.search(r'(תדל|דלק|פז|סונת|בנז)', business_name):
+        return 'תחבורה ורכב'
+    
+    # Shopping patterns
+    elif re.search(r'(מכול|סופר|שוק|רשת.*קמח|איקאי|ייבוא|זאפ)', business_name):
+        return 'קניות ורכישים'
+    
+    # Transportation patterns
+    elif re.search(r'(אוטובוס|מונית|רכב|אוטובוס)', business_name):
+        return 'תחבורה'
+    
+    # Health patterns
+    elif re.search(r'(רופא|בית.*חולים|פרמציה|מרפאה|קופת.*חולים)', business_name):
+        return 'בריאות'
+    
+    # Bank patterns
+    elif re.search(r'(בנק|אשראי|המרכז|כרטיס)', business_name):
+        return 'בנקאות ופיננסים'
+    
+    # Strategy 4: AI/ML (OpenAI integration)
+    if OPENAI_API_KEY and business_name:
+        try:
+            response = requests.post(
+                'https://api.openai.com/v1/chat/completions',
+                headers={
+                    'Authorization': f'Bearer {OPENAI_API_KEY}',
+                    'Content-Type': 'application/json'
+                },
+                json={
+                    'model': 'gpt-3.5-turbo',
+                    'messages': [
+                        {
+                            'role': 'system', 
+                            'content': '''אתה עוזר במערכת לקטגור את העסקות שלי. עליך לסווג את שם העסק לאחת מהקטגוריות הבאות:
+
+מזון תשלומים - מסעדות, מסעדות, בתי קפה, קפה, מסעדות, קפה, רשת, בר, קפה
+תחבורה ורכב - תחניות, דלק, פז, סונת, בנזין
+קניות ורכישים - מכולת, סופר, שוק, רשת קמח, איקאי, ייבוא, זאפ
+תחבורה - אוטובוס, מונית, רכב, אוטובוסיון, מוניות
+בריאות - רופא, בית חולים, פרמציה, מרפאה, קופת חולים
+פנאי ובידור - קולנוע, סרט, בית קולנוע, ספורט, פארק
+חשבונות ותשלומים - חשבון, בזר, סלולר, אינטרנט, הוטל
+חינוך - אוניברסיטה, ספריה, קורס, מכללה
+תחזוקה וביטחון - הום סעוד, רהטנות, בניין, חומרי, חומר, צבע
+נסיעות - מלון, בית מלון, טיסה, איירבנדר
+בנקאות ופיננסים - בנק, אשראי, המרכז, כרטיס
+אחר - אחר
+
+החזיר את הקטגוריה המתאימה לפי העסקות הללו. החזיר רק את השם המדויק והחזיר את הקטגוריה המתאימה (בעברית: מזון תשלומים, תחבורה ורכב, קניות ורכישים, בריאות, פנאי ובידור, חשבונות ותשלומים, חינוך, תחזוקה וביטחון, נסיעות, בנקאות ופיננסים, אחר).'''
+                        },
+                        {
+                            'role': 'user', 
+                            'content': f'שם העסק: {business_name}'
+                        }
+                    ],
+                    'max_tokens': 50,
+                    'temperature': 0.1
+                }
+            )
+            
+            if response.status_code == 200:
+                ai_category = response.json()['choices'][0]['message']['content'].strip()
+                print(f"AI categorized '{business_name}' as '{ai_category}'")
+                
+                # Map AI response to our standard categories
+                ai_mapping = {
+                    'מזון תשלומים': 'מזון תשלומים',
+                    'תחבורה ורכב': 'תחבורה ורכב',
+                    'קניות ורכישים': 'קניות ורכישים',
+                    'תחבורה': 'תחבורה',
+                    'בריאות': 'בריאות',
+                    'פנאי ובידור': 'פנאי ובידור',
+                    'חשבונות ותשלומים': 'חשבונות ותשלומים',
+                    'חינוך': 'חינוך',
+                    'תחזוקה וביטחון': 'תחזוקה וביטחון',
+                    'נסיעות': 'נסיעות',
+                    'בנקאות ופיננסים': 'בנקאות ופיננסים',
+                    'אחר': 'אחר'
+                }
+                
+                return ai_mapping.get(ai_category, 'אחר')
+            
+        except Exception as e:
+            print(f"AI categorization failed: {str(e)}")
+            return 'אחר'  # Default if AI fails
 
 def convert_to_decimal(amount_str):
     """Convert amount string to Decimal and return as string"""

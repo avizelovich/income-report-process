@@ -8,6 +8,7 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_s3_notifications as s3_notifications,
     aws_iam as iam,
+    aws_secretsmanager as _secretsmanager,
     RemovalPolicy
 )
 from constructs import Construct
@@ -80,6 +81,13 @@ class IncomeReportProcessStack(Stack):
         csv_bucket.grant_read(lambda_function)
         csv_bucket.grant_delete(lambda_function)
         csv_bucket.grant_put(lambda_function)
+        
+        # Grant permission to read OpenAI API key from Secrets Manager
+        openai_secret = _secretsmanager.Secret.from_secret_name_v2(
+            self, "OpenAISecret",
+            secret_name="openai-api-key"
+        )
+        openai_secret.grant_read(lambda_function)
 
         # API Gateway
         api = apigateway.RestApi(
