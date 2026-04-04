@@ -82,7 +82,7 @@ class IncomeReportProcessStack(Stack):
 
         # Add S3 event trigger for CSV files
         s3_trigger = _lambda_event_sources.S3EventSource(
-            bucket=csv_bucket,
+            bucket_arn=csv_bucket.bucket_arn,
             events=[s3.EventType.OBJECT_CREATED],
             filters=[s3.NotificationKeyFilter(prefix="", suffix=".csv")]
         )
