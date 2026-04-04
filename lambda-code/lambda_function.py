@@ -263,8 +263,8 @@ def process_csv_content(csv_content):
                 'date_purchase': format_date(mapped_data.get('date_purchase')),
                 'date_charging': format_date(mapped_data.get('date_charging')),
                 'business_name': mapped_data.get('business_name', ''),
-                'payment_current': convert_to_decimal(mapped_data.get('payment_current')),
-                'payment_total': convert_to_decimal(mapped_data.get('payment_total')),
+                'payment_current': str(convert_to_decimal(mapped_data.get('payment_current'))),
+                'payment_total': str(convert_to_decimal(mapped_data.get('payment_total'))),
                 'purchase_type': mapped_data.get('purchase_type', ''),
                 'category': mapped_data.get('category', ''),  # New category field
                 'created_at': datetime.utcnow().isoformat(),
