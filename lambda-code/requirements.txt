@@ -1,2 +1,2 @@
 boto3
-requests==1.34.0
+requests
