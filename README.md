@@ -136,3 +136,5 @@ The Lambda function receives these environment variables:
 - DynamoDB metrics in CloudWatch
 - S3 access logs
 - API Gateway access logs
+## Deployment Status
+- [ ] Deployment in progress...
