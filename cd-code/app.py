@@ -7,11 +7,6 @@ from income_report_process.income_report_process_stack import IncomeReportProces
 
 app = App()
 
-IncomeReportProcessStack(app, "IncomeReportProcessStack", {
-    'env': Environment(
-        'account': os.environ.get('CDK_DEFAULT_ACCOUNT'),
-        'region': os.environ.get('CDK_DEFAULT_REGION'),
-    )
-})
+IncomeReportProcessStack(app, "IncomeReportProcessStack")
 
 app.synth()
