@@ -244,16 +244,36 @@ def handle_category_calc_action(event):
                 print(f"  -> Found {total_items} items, total amount: {total_amount:.2f}")
                 
                 # Update business category with calculated totals
-                business_category_table.update_item(
-                    Key={'business_name': business_name},
-                    UpdateExpression="SET expenses_total_items = :items, expenses_total_amount = :amount, updated_at = :updated",
-                    ExpressionAttributeValues={
-                        ':items': total_items,
-                        ':amount': total_amount,  # Store as regular float
-                        ':updated': datetime.utcnow().isoformat()
-                    },
-                    ReturnValues="UPDATED_NEW"
-                )
+                try:
+                    business_category_table.update_item(
+                        Key={'business_name': business_name},
+                        UpdateExpression="SET expenses_total_items = if_not_exists(expenses_total_items, :items), expenses_total_amount = if_not_exists(expenses_total_amount, :amount), updated_at = :updated",
+                        ExpressionAttributeValues={
+                            ':items': total_items,
+                            ':amount': total_amount,  # Store as regular float
+                            ':updated': datetime.utcnow().isoformat()
+                        },
+                        ReturnValues="ALL_NEW"  # Return all attributes after update
+                    )
+                    print(f"  -> Successfully updated business record")
+                except Exception as update_error:
+                    print(f"  -> Update error: {str(update_error)}")
+                    # Try alternative update without if_not_exists
+                    try:
+                        business_category_table.update_item(
+                            Key={'business_name': business_name},
+                            UpdateExpression="SET expenses_total_items = :items, expenses_total_amount = :amount, updated_at = :updated",
+                            ExpressionAttributeValues={
+                                ':items': total_items,
+                                ':amount': total_amount,
+                                ':updated': datetime.utcnow().isoformat()
+                            },
+                            ReturnValues="ALL_NEW"
+                        )
+                        print(f"  -> Updated with alternative method")
+                    except Exception as alt_error:
+                        print(f"  -> Alternative update also failed: {str(alt_error)}")
+                        raise alt_error
                 
                 stats['updated'] += 1
                 print(f"  -> Updated totals for {business_name}: {total_items} items, {total_amount:.2f} total")
