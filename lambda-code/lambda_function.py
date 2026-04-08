@@ -286,15 +286,59 @@ def process_csv_content(csv_content):
             # Clean and format data
             business_name = mapped_data.get('business_name', '')
             category_value = mapped_data.get('category', '') or get_category_from_business_table(business_name)
+            date_purchase = format_date(mapped_data.get('date_purchase'))
+            purchase_id = mapped_data.get('purchase_id', '')
+            card_id = mapped_data.get('card_id', '')
             
             # Ensure category is never empty for GSI
             if not category_value or category_value.strip() == '':
                 category_value = 'לא סווג'
             
+            # Create composite sort key from business_name and date_purchase
+            business_date = f"{business_name}#{date_purchase}"
+            
+            # Check if item already exists
+            try:
+                existing_item = table.get_item(
+                    Key={
+                        'purchase_id': purchase_id,
+                        'business_date': business_date
+                    }
+                )
+                
+                if 'Item' in existing_item:
+                    # Item exists, update category if different
+                    existing_category = existing_item['Item'].get('category', 'לא סווג')
+                    if existing_category != category_value:
+                        print(f"Updating existing item {purchase_id} category from '{existing_category}' to '{category_value}'")
+                        table.update_item(
+                            Key={
+                                'purchase_id': purchase_id,
+                                'business_date': business_date
+                            },
+                            UpdateExpression='set #category = :category, updated_at = :updated_at',
+                            ExpressionAttributeNames={
+                                '#category': 'category'
+                            },
+                            ExpressionAttributeValues={
+                                ':category': category_value,
+                                ':updated_at': datetime.utcnow().isoformat()
+                            }
+                        )
+                        processed_count += 1
+                    else:
+                        print(f"Item {purchase_id} already exists with same category, skipping")
+                    continue
+                    
+            except Exception as e:
+                print(f"Error checking existing item: {str(e)}")
+            
+            # Create new item
             item = {
-                'card_id': mapped_data['card_id'],
-                'purchase_id': mapped_data['purchase_id'],
-                'date_purchase': format_date(mapped_data.get('date_purchase')),
+                'purchase_id': purchase_id,
+                'business_date': business_date,
+                'card_id': card_id,
+                'date_purchase': date_purchase,
                 'date_charging': format_date(mapped_data.get('date_charging')),
                 'business_name': business_name,
                 'payment_current': convert_to_decimal(mapped_data.get('payment_current')),

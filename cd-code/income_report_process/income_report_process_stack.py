@@ -25,11 +25,11 @@ class IncomeReportProcessStack(Stack):
             self, "ExpensesTable",
             table_name="expenses",
             partition_key=dynamodb.Attribute(
-                name="card_id",
+                name="purchase_id",
                 type=dynamodb.AttributeType.STRING
             ),
             sort_key=dynamodb.Attribute(
-                name="purchase_id",
+                name="business_date",
                 type=dynamodb.AttributeType.STRING
             ),
             removal_policy=RemovalPolicy.DESTROY,
@@ -40,6 +40,13 @@ class IncomeReportProcessStack(Stack):
         expenses_table.add_global_secondary_index(
             index_name="CategoryIndex",
             partition_key=dynamodb.Attribute(name="category", type=dynamodb.AttributeType.STRING),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add Global Secondary Index for card_id (for backward compatibility)
+        expenses_table.add_global_secondary_index(
+            index_name="CardIndex",
+            partition_key=dynamodb.Attribute(name="card_id", type=dynamodb.AttributeType.STRING),
             projection_type=dynamodb.ProjectionType.ALL
         )
 
