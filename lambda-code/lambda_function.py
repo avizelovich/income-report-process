@@ -249,7 +249,7 @@ def handle_category_calc_action(event):
                     UpdateExpression="SET expenses_total_items = :items, expenses_total_amount = :amount, updated_at = :updated",
                     ExpressionAttributeValues={
                         ':items': total_items,
-                        ':amount': int(total_amount * 100) if total_amount else 0,  # Store as integer (cents)
+                        ':amount': total_amount,  # Store as regular float
                         ':updated': datetime.utcnow().isoformat()
                     },
                     ReturnValues="UPDATED_NEW"
