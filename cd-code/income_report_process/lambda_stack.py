@@ -20,19 +20,18 @@ class LambdaStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, expenses_table_name: str, business_category_table_name: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # S3 bucket for CSV files
+        # S3 bucket for CSV files (reference existing bucket)
         bucket_name = CfnParameter(
             self, "BucketName",
             type="String",
-            description="Name of the S3 bucket for CSV files",
+            description="Name of the existing S3 bucket for CSV files",
             default="income-report-expenses-csv"
         )
         
-        bucket = s3.Bucket(
+        # Reference existing S3 bucket
+        bucket = s3.Bucket.from_bucket_name(
             self, "ExpensesBucket",
-            bucket_name=bucket_name.value_as_string,
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True
+            bucket_name.value_as_string
         )
 
         # Lambda function
