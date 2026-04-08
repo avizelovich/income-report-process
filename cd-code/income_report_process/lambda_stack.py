@@ -39,7 +39,7 @@ class LambdaStack(Stack):
             self, "IncomeReportProcessLambda",
             runtime=_lambda.Runtime.PYTHON_3_11,
             handler="lambda_function.lambda_handler",
-            code=_lambda.Code.from_asset("../lambda-code"),
+            code=_lambda.Code.from_asset("../../lambda-code"),
             timeout=Duration.minutes(10),
             memory_size=512,
             environment={
