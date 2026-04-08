@@ -198,6 +198,65 @@ def get_category_from_business_table(business_name):
         print(f"Error looking up business category for '{business_name}': {str(e)}")
         return None
 
+def add_business_to_category_table(business_name, category):
+    """Add business to category table"""
+    if not business_name:
+        return 'PENDING'
+    
+    try:
+        # Normalize business name (trim spaces, consistent casing)
+        normalized_business = business_name.strip()
+        
+        # Check if business already exists in table
+        existing = business_category_table.get_item(
+            Key={'business_name': normalized_business}
+        )
+        
+        if 'Item' in existing:
+            print(f"Business '{normalized_business}' already exists in table with category: {existing['Item'].get('category', 'PENDING')}")
+            return existing['Item'].get('category', 'PENDING')
+        
+        # Try exact match first
+        response = business_category_table.get_item(
+            Key={'business_name': normalized_business}
+        )
+        
+        if 'Item' in response:
+            category = response['Item'].get('category', '').strip()
+            print(f"Found existing category for '{normalized_business}': {category}")
+            return category
+        
+        # If no exact match, try case-insensitive scan
+        scan_response = business_category_table.scan(
+            FilterExpression='contains(business_name, :business_name)',
+            ExpressionAttributeValues={':business_name': normalized_business}
+        )
+        
+        for item in scan_response.get('Items', []):
+            category = item.get('category', '').strip()
+            if category and category != 'PENDING':
+                print(f"Found partial match for '{normalized_business}': {category}")
+                return category
+        
+        # Business not found in table, add as PENDING
+        print(f"Business '{normalized_business}' not found in table, adding as PENDING...")
+        category = 'PENDING'
+        
+        # Add to business-category table with PENDING status
+        business_category_table.put_item(
+            Item={
+                'business_name': normalized_business,
+                'category': category,
+                'created_at': datetime.utcnow().isoformat()
+            }
+        )
+        print(f"Added '{normalized_business}' to business-category table with category: {category}")
+        return category
+        
+    except Exception as e:
+        print(f"Error accessing business-category table: {str(e)}")
+        return 'PENDING'
+
 def handle_process_action(event, context):
     """Handle original process action - unchanged"""
     try:
