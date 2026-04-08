@@ -12,24 +12,13 @@ class BusinessCategoryStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # DynamoDB table for business categories
+        # DynamoDB table for business categories with all attributes defined
         business_category_table = dynamodb.Table(
             self, "BusinessCategoryTable",
             table_name="business-category",
             partition_key=dynamodb.Attribute(name="business_name", type=dynamodb.AttributeType.STRING),
             removal_policy=RemovalPolicy.DESTROY,
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST
-        )
-
-        # Add default attributes for new columns
-        business_category_table.add_attribute(
-            name="expenses_total_items",
-            attribute_type=dynamodb.AttributeType.NUMBER
-        )
-
-        business_category_table.add_attribute(
-            name="expenses_total_amount", 
-            attribute_type=dynamodb.AttributeType.NUMBER
         )
 
         # Output for other stacks to reference
