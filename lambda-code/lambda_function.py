@@ -102,8 +102,8 @@ def handle_categorize_action(event):
                 business_date = expense.get('business_date', '')
                 amount = expense.get('payment_current', '')
                 
-                # Skip if already has a category (including PENDING)
-                if current_category and current_category != 'לא סווג':
+                # Skip if already has a real category (not PENDING and not empty)
+                if current_category and current_category.strip() and current_category != 'PENDING' and current_category != 'לא סווג':
                     stats['already_categorized'] += 1
                     print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: {current_category} - already categorized")
                     continue
