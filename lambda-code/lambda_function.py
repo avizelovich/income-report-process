@@ -50,7 +50,7 @@ def lambda_handler(event, context):
         action = event.get('action', 'process')
         
         if action == 'categorize':
-            return handle_categorize_action()
+            return handle_categorize_action(event)
         else:
             return handle_process_action()
             
@@ -64,10 +64,13 @@ def lambda_handler(event, context):
             })
         }
 
-def handle_categorize_action():
+def handle_categorize_action(event):
     """Handle categorize action - update expenses with categories from business-category table"""
     try:
         print("Starting categorize action...")
+        
+        # Check for verbose parameter
+        verbose = event.get('verbose', '').lower() == 'true'
         
         # Initialize counters
         stats = {
@@ -94,22 +97,25 @@ def handle_categorize_action():
         # Process each expense
         for expense in expenses:
             try:
-                # Get current category
+                # Get current category and details
                 current_category = expense.get('category', '').strip()
                 business_name = expense.get('business_name', '').strip()
                 purchase_id = expense.get('purchase_id', '')
                 business_date = expense.get('business_date', '')
+                amount = expense.get('payment_current', '')
                 
                 # Skip if already has a category
                 if current_category and current_category != 'לא סווג':
                     stats['already_categorized'] += 1
-                    print(f"Skipping {purchase_id} - already has category: {current_category}")
+                    if verbose:
+                        print(f"amount[{amount}] business-name[{business_name}] the category[{current_category}] - already categorized")
                     continue
                 
                 # Skip if no business name
                 if not business_name:
                     stats['no_matching_category'] += 1
-                    print(f"Skipping {purchase_id} - no business name")
+                    if verbose:
+                        print(f"amount[{amount}] business-name[{business_name}] the category[null] - no business name")
                     continue
                 
                 # Look up business category
@@ -132,17 +138,19 @@ def handle_categorize_action():
                         }
                     )
                     stats['updated'] += 1
-                    print(f"Updated {purchase_id} ({business_name}) with category: {business_category}")
+                    if verbose:
+                        print(f"amount[{amount}] business-name[{business_name}] the category[{business_category}] - updated")
                 else:
                     stats['no_matching_category'] += 1
-                    print(f"No category found for {purchase_id} ({business_name})")
+                    if verbose:
+                        print(f"amount[{amount}] business-name[{business_name}] the category[null] - no matching category")
                     
             except Exception as e:
                 stats['errors'] += 1
                 print(f"Error processing expense {expense.get('purchase_id', 'unknown')}: {str(e)}")
         
-        # Log final statistics
-        print(f"Categorization complete: {json.dumps(stats)}")
+        # Print summary line
+        print(f"Total expense items[{stats['total_expenses']}] , categorie[{stats['updated']}]")
         
         return {
             'statusCode': 200,
