@@ -45,11 +45,163 @@ class CustomJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 def lambda_handler(event, context):
-    """
-    Lambda function for income report processing
-    Processes CSV files from S3 and stores them in DynamoDB
-    Can be triggered manually or via API Gateway
-    """
+    """Main Lambda handler with multiple actions"""
+    try:
+        action = event.get('action', 'process')
+        
+        if action == 'categorize':
+            return handle_categorize_action()
+        else:
+            return handle_process_action()
+            
+    except Exception as e:
+        print(f"Error in lambda_handler: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'message': 'Internal server error',
+                'error': str(e)
+            })
+        }
+
+def handle_categorize_action():
+    """Handle categorize action - update expenses with categories from business-category table"""
+    try:
+        print("Starting categorize action...")
+        
+        # Initialize counters
+        stats = {
+            'total_expenses': 0,
+            'already_categorized': 0,
+            'updated': 0,
+            'no_matching_category': 0,
+            'errors': 0
+        }
+        
+        # Scan all expenses from the table
+        print("Scanning all expense records...")
+        response = table.scan()
+        expenses = response.get('Items', [])
+        
+        # Handle pagination if needed
+        while 'LastEvaluatedKey' in response:
+            response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+            expenses.extend(response.get('Items', []))
+        
+        stats['total_expenses'] = len(expenses)
+        print(f"Found {stats['total_expenses']} expense records to process")
+        
+        # Process each expense
+        for expense in expenses:
+            try:
+                # Get current category
+                current_category = expense.get('category', '').strip()
+                business_name = expense.get('business_name', '').strip()
+                purchase_id = expense.get('purchase_id', '')
+                business_date = expense.get('business_date', '')
+                
+                # Skip if already has a category
+                if current_category and current_category != 'לא סווג':
+                    stats['already_categorized'] += 1
+                    print(f"Skipping {purchase_id} - already has category: {current_category}")
+                    continue
+                
+                # Skip if no business name
+                if not business_name:
+                    stats['no_matching_category'] += 1
+                    print(f"Skipping {purchase_id} - no business name")
+                    continue
+                
+                # Look up business category
+                business_category = get_business_category(business_name)
+                
+                if business_category and business_category.strip() and business_category != 'PENDING':
+                    # Update expense with category
+                    table.update_item(
+                        Key={
+                            'purchase_id': purchase_id,
+                            'business_date': business_date
+                        },
+                        UpdateExpression='set #category = :category, updated_at = :updated_at',
+                        ExpressionAttributeNames={
+                            '#category': 'category'
+                        },
+                        ExpressionAttributeValues={
+                            ':category': business_category,
+                            ':updated_at': datetime.utcnow().isoformat()
+                        }
+                    )
+                    stats['updated'] += 1
+                    print(f"Updated {purchase_id} ({business_name}) with category: {business_category}")
+                else:
+                    stats['no_matching_category'] += 1
+                    print(f"No category found for {purchase_id} ({business_name})")
+                    
+            except Exception as e:
+                stats['errors'] += 1
+                print(f"Error processing expense {expense.get('purchase_id', 'unknown')}: {str(e)}")
+        
+        # Log final statistics
+        print(f"Categorization complete: {json.dumps(stats)}")
+        
+        return {
+            'statusCode': 200,
+            'body': json.dumps({
+                'message': 'Categorization completed successfully',
+                'statistics': stats
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error in handle_categorize_action: {str(e)}")
+        return {
+            'statusCode': 500,
+            'body': json.dumps({
+                'message': 'Categorization failed',
+                'error': str(e)
+            })
+        }
+
+def get_business_category(business_name):
+    """Get category from business-category table with normalized matching"""
+    if not business_name:
+        return None
+    
+    try:
+        # Normalize business name (trim spaces, consistent casing)
+        normalized_business = business_name.strip()
+        
+        # Try exact match first
+        response = business_category_table.get_item(
+            Key={'business_name': normalized_business}
+        )
+        
+        if 'Item' in response:
+            category = response['Item'].get('category', '').strip()
+            if category and category != 'PENDING':
+                print(f"Found exact match for '{normalized_business}': {category}")
+                return category
+        
+        # If no exact match, try case-insensitive scan
+        scan_response = business_category_table.scan(
+            FilterExpression='contains(business_name, :business_name)',
+            ExpressionAttributeValues={':business_name': normalized_business}
+        )
+        
+        for item in scan_response.get('Items', []):
+            category = item.get('category', '').strip()
+            if category and category != 'PENDING':
+                print(f"Found partial match for '{normalized_business}': {category}")
+                return category
+        
+        return None
+        
+    except Exception as e:
+        print(f"Error looking up business category for '{business_name}': {str(e)}")
+        return None
+
+def handle_process_action():
+    """Handle original process action - unchanged"""
     try:
         print(f"Received event: {json.dumps(event, cls=CustomJSONEncoder)}")
         print(f"Context: {context}")
