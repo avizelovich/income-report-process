@@ -1,10 +1,32 @@
-name: Deploy to AWS
+name: Deploy Infrastructure
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      deploy_all:
+        description: 'Deploy all 3 stacks'
+        required: true
+        default: true
+        type: boolean
+      deploy_business_category:
+        description: 'Deploy BusinessCategoryStack only'
+        required: false
+        default: false
+        type: boolean
+      deploy_expenses:
+        description: 'Deploy ExpensesStack only'
+        required: false
+        default: false
+        type: boolean
+      deploy_lambda:
+        description: 'Deploy LambdaStack only'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   id-token: write
@@ -30,6 +52,8 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '24'
+        cache: 'npm'
+        cache-dependency-path: cd-code/income_report_process
         
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -40,8 +64,9 @@ jobs:
         
     - name: Install CDK dependencies
       run: |
-        cd cd-code
+        cd cd-code/income_report_process
         pip install -r requirements.txt
+        npm install
         
     - name: Install AWS CDK
       run: |
@@ -49,10 +74,110 @@ jobs:
         
     - name: Bootstrap CDK (if needed)
       run: |
-        cd cd-code
+        cd cd-code/income_report_process
         cdk bootstrap || true
         
-    - name: Deploy CDK Stack
+    - name: Deploy All Stacks
+      if: ${{ github.event.inputs.deploy_all == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
       run: |
-        cd cd-code
-        cdk deploy --require-approval never
+        cd cd-code/income_report_process
+        cdk deploy --all --require-approval never
+        
+    - name: Deploy BusinessCategoryStack Only
+      if: ${{ github.event.inputs.deploy_business_category == 'true' }}
+      run: |
+        cd cd-code/income_report_process
+        cdk deploy BusinessCategoryStack --require-approval never
+        
+    - name: Deploy ExpensesStack Only
+      if: ${{ github.event.inputs.deploy_expenses == 'true' }}
+      run: |
+        cd cd-code/income_report_process
+        cdk deploy ExpensesStack --require-approval never
+        
+    - name: Deploy LambdaStack Only
+      if: ${{ github.event.inputs.deploy_lambda == 'true' }}
+      run: |
+        cd cd-code/income_report_process
+        cdk deploy LambdaStack --require-approval never
+        
+    - name: Get Deployment Outputs
+      run: |
+        cd cd-code/income_report_process
+        echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Get API URL from CloudFormation
+        API_URL=$(aws cloudformation describe-stacks --stack-name LambdaStack --query 'Stacks[0].Outputs[?OutputKey==`IncomeReportApiUrl`].OutputValue' --output text 2>/dev/null || echo "")
+        if [ ! -z "$API_URL" ]; then
+          echo "### 🌐 API Gateway" >> $GITHUB_STEP_SUMMARY
+          echo "**API URL:** $API_URL" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Get DynamoDB Table Names
+        BUSINESS_TABLE=$(aws cloudformation describe-stacks --stack-name BusinessCategoryStack --query 'Stacks[0].Outputs[?OutputKey==`BusinessCategoryTableName`].OutputValue' --output text 2>/dev/null || echo "")
+        EXPENSES_TABLE=$(aws cloudformation describe-stacks --stack-name ExpensesStack --query 'Stacks[0].Outputs[?OutputKey==`ExpensesTableName`].OutputValue' --output text 2>/dev/null || echo "")
+        
+        if [ ! -z "$BUSINESS_TABLE" ] || [ ! -z "$EXPENSES_TABLE" ]; then
+          echo "### 📊 DynamoDB Tables" >> $GITHUB_STEP_SUMMARY
+          if [ ! -z "$BUSINESS_TABLE" ]; then
+            echo "**Business Category Table:** $BUSINESS_TABLE" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ ! -z "$EXPENSES_TABLE" ]; then
+            echo "**Expenses Table:** $EXPENSES_TABLE" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Get S3 Bucket Name
+        BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name LambdaStack --query 'Stacks[0].Outputs[?OutputKey==`ExpensesBucketName`].OutputValue' --output text 2>/dev/null || echo "")
+        if [ ! -z "$BUCKET_NAME" ]; then
+          echo "### 📦 S3 Bucket" >> $GITHUB_STEP_SUMMARY
+          echo "**Bucket Name:** $BUCKET_NAME" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: Test API Endpoints
+      if: ${{ github.event.inputs.deploy_all == 'true' || (github.event_name == 'push' && github.ref == 'refs/heads/main') }}
+      run: |
+        # Wait for deployment to propagate
+        echo "Waiting 30 seconds for deployment to propagate..."
+        sleep 30
+        
+        # Get API URL
+        API_URL=$(aws cloudformation describe-stacks --stack-name LambdaStack --query 'Stacks[0].Outputs[?OutputKey==`IncomeReportApiUrl`].OutputValue' --output text 2>/dev/null || echo "")
+        
+        if [ ! -z "$API_URL" ]; then
+          echo "Testing API endpoints..."
+          
+          # Test process action
+          echo "Testing process action..."
+          PROCESS_RESPONSE=$(curl -s -w "%{http_code}" "$API_URL?action=process")
+          HTTP_CODE="${PROCESS_RESPONSE: -3}"
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Process action: Success"
+            echo "**Process Action:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Process action: Failed (HTTP $HTTP_CODE)"
+            echo "**Process Action:** ❌ Failed (HTTP $HTTP_CODE)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Test categorize action
+          echo "Testing categorize action..."
+          CATEGORIZE_RESPONSE=$(curl -s -w "%{http_code}" "$API_URL?action=categorize")
+          HTTP_CODE="${CATEGORIZE_RESPONSE: -3}"
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Categorize action: Success"
+            echo "**Categorize Action:** ✅ Success" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Categorize action: Failed (HTTP $HTTP_CODE)"
+            echo "**Categorize Action:** ❌ Failed (HTTP $HTTP_CODE)" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "### 🧪 API Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "**Test API:** $API_URL?action=process" >> $GITHUB_STEP_SUMMARY
+          echo "**Categorize API:** $API_URL?action=categorize" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Could not find API URL for testing"
+          echo "**API Testing:** ❌ Could not find API URL" >> $GITHUB_STEP_SUMMARY
+        fi
