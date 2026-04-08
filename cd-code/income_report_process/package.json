@@ -1,0 +1,27 @@
+{
+  "name": "income-report-process",
+  "version": "1.0.0",
+  "description": "Income Report Processing Infrastructure",
+  "main": "app.js",
+  "scripts": {
+    "build": "cdk synth",
+    "watch": "cdk watch",
+    "deploy": "cdk deploy",
+    "deploy:all": "cdk deploy --all",
+    "destroy": "cdk destroy --all"
+  },
+  "keywords": [
+    "cdk",
+    "aws",
+    "infrastructure"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "aws-cdk": "^2.100.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.100.0",
+    "constructs": "^10.3.0"
+  }
+}
