@@ -269,13 +269,9 @@ def handle_api_request(event, context):
              event.get('path', '') == '/process')):
             return process_all_csv_files()
         
-        # Default: Get expenses from DynamoDB
-        response = table.scan(
-            Limit=10
-        )
-        
+        # Return error for unknown actions - don't return expenses data
         return {
-            'statusCode': 200,
+            'statusCode': 400,
             'headers': {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': '*',
@@ -283,15 +279,9 @@ def handle_api_request(event, context):
                 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
             },
             'body': json.dumps({
-                'message': 'Income report processing Lambda is working',
-                'expenses': response.get('Items', []),
-                'table_name': TABLE_NAME,
-                'bucket_name': BUCKET_NAME,
-                'instructions': {
-                    'process_csv': 'Add ?action=process to process all CSV files in bucket',
-                    'process_csv_alt': 'GET /process to process all CSV files',
-                    'upload_csv': f'Upload CSV files to s3://{BUCKET_NAME}/'
-                }
+                'message': 'Invalid action. Use action=process or action=categorize',
+                'received_action': event.get('queryStringParameters', {}).get('action', 'none'),
+                'available_actions': ['process', 'categorize']
             }, cls=CustomJSONEncoder)
         }
         
