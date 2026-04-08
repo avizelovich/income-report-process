@@ -69,9 +69,6 @@ def handle_categorize_action(event):
     try:
         print("Starting categorize action...")
         
-        # Check for verbose parameter
-        verbose = event.get('verbose', '').lower() == 'true'
-        
         # Initialize counters
         stats = {
             'total_expenses': 0,
@@ -81,7 +78,7 @@ def handle_categorize_action(event):
             'errors': 0
         }
         
-        # Scan all expenses from the table
+        # Scan all expenses from table
         print("Scanning all expense records...")
         response = table.scan()
         expenses = response.get('Items', [])
@@ -107,15 +104,13 @@ def handle_categorize_action(event):
                 # Skip if already has a category
                 if current_category and current_category != 'לא סווג':
                     stats['already_categorized'] += 1
-                    if verbose:
-                        print(f"amount[{amount}] business-name[{business_name}] the category[{current_category}] - already categorized")
+                    print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: {current_category} - already categorized")
                     continue
                 
                 # Skip if no business name
                 if not business_name:
                     stats['no_matching_category'] += 1
-                    if verbose:
-                        print(f"amount[{amount}] business-name[{business_name}] the category[null] - no business name")
+                    print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: null - no business name")
                     continue
                 
                 # Look up business category
@@ -138,19 +133,17 @@ def handle_categorize_action(event):
                         }
                     )
                     stats['updated'] += 1
-                    if verbose:
-                        print(f"amount[{amount}] business-name[{business_name}] the category[{business_category}] - updated")
+                    print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: {business_category}")
                 else:
                     stats['no_matching_category'] += 1
-                    if verbose:
-                        print(f"amount[{amount}] business-name[{business_name}] the category[null] - no matching category")
+                    print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: null - no matching category")
                     
             except Exception as e:
                 stats['errors'] += 1
                 print(f"Error processing expense {expense.get('purchase_id', 'unknown')}: {str(e)}")
         
-        # Print summary line
-        print(f"Total expense items[{stats['total_expenses']}] , categorie[{stats['updated']}]")
+        # Print summary
+        print(f"\nSUMMARY: Processed {stats['total_expenses']} items, categorized {stats['updated']} items")
         
         return {
             'statusCode': 200,
