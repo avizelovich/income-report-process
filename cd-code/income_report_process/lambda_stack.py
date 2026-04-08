@@ -104,8 +104,9 @@ class LambdaStack(Stack):
             path="/{proxy+}",
             methods=[apigateway.HttpMethod.ANY],
             integration=apigateway.HttpIntegration(
-                handler=lambda_function,
-                payload_format_version=apigateway.PayloadFormatVersion.VERSION_2_0
+                proxy_integration=apigateway.HttpProxyIntegration(
+                    handler=lambda_function
+                )
             )
         )
 
