@@ -21,6 +21,17 @@ class BusinessCategoryStack(Stack):
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST
         )
 
+        # Add default attributes for new columns
+        business_category_table.add_attribute(
+            name="expenses_total_items",
+            attribute_type=dynamodb.AttributeType.NUMBER
+        )
+
+        business_category_table.add_attribute(
+            name="expenses_total_amount", 
+            attribute_type=dynamodb.AttributeType.NUMBER
+        )
+
         # Output for other stacks to reference
         self.business_category_table_name = business_category_table.table_name
         
