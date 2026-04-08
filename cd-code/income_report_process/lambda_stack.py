@@ -96,8 +96,16 @@ class LambdaStack(Stack):
 
         # API Gateway for manual triggering
         api = apigateway.HttpApi(
-            self, "IncomeReportApi",
-            default_function=lambda_function
+            self, "IncomeReportApi"
+        )
+        
+        # Add Lambda integration for all routes
+        api.add_routes(
+            path="/{proxy+}",
+            methods=[apigateway.HttpMethod.ANY],
+            integration=apigateway.HttpLambdaIntegration(
+                handler=lambda_function
+            )
         )
 
         # CloudFormation outputs
