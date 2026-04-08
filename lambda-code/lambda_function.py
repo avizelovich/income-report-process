@@ -47,7 +47,8 @@ class CustomJSONEncoder(json.JSONEncoder):
 def lambda_handler(event, context):
     """Main Lambda handler with multiple actions"""
     try:
-        action = event.get('action', 'process')
+        # Get action from query string parameters first, then fallback to event body
+        action = event.get('queryStringParameters', {}).get('action') or event.get('action', 'process')
         
         if action == 'categorize':
             return handle_categorize_action(event)
