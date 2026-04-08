@@ -109,7 +109,7 @@ class LambdaStack(Stack):
         )
         
         CfnOutput(
-            self, "BucketName",
+            self, "S3BucketName",
             value=bucket_name.value_as_string,
-            export_name="ExpensesBucketName"
+            export_name="ExpensesS3BucketName"
         )
