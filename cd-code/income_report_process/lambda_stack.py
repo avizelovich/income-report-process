@@ -90,7 +90,6 @@ class LambdaStack(Stack):
         bucket.add_event_notification(
             s3.EventType.OBJECT_CREATED,
             notification,
-            s3.NotificationKeyFilter(prefix=""),
             s3.NotificationKeyFilter(suffix=".csv")
         )
 
