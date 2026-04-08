@@ -64,21 +64,8 @@ def handle_categorize_action(event):
             'errors': 0
         }
         
-        # Scan all expenses from table
-        print("Scanning all expense records...")
-        response = table.scan()
-        expenses = response.get('Items', [])
-        
-        # Handle pagination if needed
-        while 'LastEvaluatedKey' in response:
-            response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
-            expenses.extend(response.get('Items', []))
-        
-        stats['total_expenses'] = len(expenses)
-        print(f"Found {stats['total_expenses']} expense records to process")
-        
         # Process each expense
-        for expense in expenses:
+        for i, expense in enumerate(expenses, 1):
             try:
                 # Get current category and details
                 current_category = expense.get('category', '').strip()
@@ -87,69 +74,88 @@ def handle_categorize_action(event):
                 business_date = expense.get('business_date', '')
                 amount = expense.get('payment_current', '')
                 
+                print(f"Processing item {i}/{len(expenses)}: Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Current Category: {current_category}")
+                
                 # Skip if already has a real category (not PENDING and not empty)
                 if current_category and current_category.strip() and current_category != 'PENDING' and current_category != 'לא סווג':
                     stats['already_categorized'] += 1
-                    print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: {current_category} - already categorized")
+                    print(f"  → Already categorized as: {current_category}")
                     continue
                 
                 # Skip if no business name
                 if not business_name:
                     stats['no_matching_category'] += 1
-                    print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: null - no business name")
+                    print(f"  → No business name found")
                     continue
                 
-                # Look up business category
-                business_category = get_business_category(business_name)
+                # Look up category from business-category table
+                category = get_category_from_business_table(business_name)
                 
-                if business_category and business_category.strip() and business_category != 'PENDING':
+                if category and category != 'PENDING':
                     # Update expense with category
-                    table.update_item(
+                    response = table.update_item(
                         Key={
                             'purchase_id': purchase_id,
                             'business_date': business_date
                         },
-                        UpdateExpression='set #category = :category, updated_at = :updated_at',
-                        ExpressionAttributeNames={
-                            '#category': 'category'
-                        },
+                        UpdateExpression="SET #category = :cat",
                         ExpressionAttributeValues={
-                            ':category': business_category,
-                            ':updated_at': datetime.utcnow().isoformat()
-                        }
+                            ':cat': category
+                        },
+                        ReturnValues="UPDATED_NEW"
                     )
                     stats['updated'] += 1
-                    print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: {business_category}")
+                    print(f"  → Updated category to: {category}")
                 else:
+                    # Add to business-category table as PENDING if not exists
+                    add_business_to_category_table(business_name, 'PENDING')
                     stats['no_matching_category'] += 1
-                    print(f"Purchase ID: {purchase_id}, Amount: {amount}, Business: {business_name}, Category: null - no matching category")
+                    print(f"  → No category found, marked as PENDING")
                     
             except Exception as e:
                 stats['errors'] += 1
-                print(f"Error processing expense {expense.get('purchase_id', 'unknown')}: {str(e)}")
+                print(f"  → Error processing expense {purchase_id}: {str(e)}")
         
         # Print summary
-        print(f"\nSUMMARY: Processed {stats['total_expenses']} items, categorized {stats['updated']} items")
+        print(f"\n=== CATEGORIZATION SUMMARY ===")
+        print(f"Total expenses processed: {stats['total_expenses']}")
+        print(f"Already categorized: {stats['already_categorized']}")
+        print(f"Updated with new categories: {stats['updated']}")
+        print(f"No matching category: {stats['no_matching_category']}")
+        print(f"Errors: {stats['errors']}")
+        print(f"==============================\n")
         
         return {
             'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+            },
             'body': json.dumps({
                 'message': 'Categorization completed successfully',
                 'statistics': stats
-            })
+            }, cls=CustomJSONEncoder)
         }
         
     except Exception as e:
-        print(f"Error in handle_categorize_action: {str(e)}")
+        print(f"Error in categorize action: {str(e)}")
         return {
             'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+            },
             'body': json.dumps({
-                'message': 'Categorization failed',
+                'message': 'Error during categorization',
                 'error': str(e)
-            })
+            }, cls=CustomJSONEncoder)
         }
 
-def get_business_category(business_name):
+def get_category_from_business_table(business_name):
     """Get category from business-category table with normalized matching"""
     if not business_name:
         return None
