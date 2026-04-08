@@ -295,7 +295,7 @@ def handle_category_calc_action(event):
                         UpdateExpression="SET expenses_total_items = if_not_exists(expenses_total_items, :items), expenses_total_amount = if_not_exists(expenses_total_amount, :amount), updated_at = :updated",
                         ExpressionAttributeValues={
                             ':items': total_items,
-                            ':amount': total_amount,  # Store as regular float
+                            ':amount': Decimal(str(total_amount)),  # Convert to Decimal
                             ':updated': datetime.utcnow().isoformat()
                         },
                         ReturnValues="ALL_NEW"  # Return all attributes after update
@@ -310,7 +310,7 @@ def handle_category_calc_action(event):
                             UpdateExpression="SET expenses_total_items = :items, expenses_total_amount = :amount, updated_at = :updated",
                             ExpressionAttributeValues={
                                 ':items': total_items,
-                                ':amount': total_amount,
+                                ':amount': Decimal(str(total_amount)),  # Convert to Decimal
                                 ':updated': datetime.utcnow().isoformat()
                             },
                             ReturnValues="ALL_NEW"
