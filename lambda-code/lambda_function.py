@@ -3,32 +3,17 @@ import os
 import boto3
 import csv
 import io
-import requests  # For OpenAI API
 from datetime import datetime, date
 from decimal import Decimal
 
 # Initialize AWS clients
 dynamodb = boto3.resource('dynamodb')
 s3 = boto3.client('s3')
-secrets_manager = boto3.client('secretsmanager')
 
 # Get environment variables
-TABLE_NAME = os.environ.get('EXPENSES_TABLE_NAME')
-BUCKET_NAME = os.environ.get('CSV_BUCKET_NAME')
+TABLE_NAME = os.environ.get('TABLE_NAME')
+BUCKET_NAME = os.environ.get('BUCKET_NAME')
 BUSINESS_CATEGORY_TABLE_NAME = os.environ.get('BUSINESS_CATEGORY_TABLE_NAME')
-
-# Get OpenAI API key from Secrets Manager
-OPENAI_API_KEY = None
-try:
-    secret_response = secrets_manager.get_secret_value(
-        SecretId='openai-api-key'
-    )
-    secret_data = json.loads(secret_response['SecretString'])
-    OPENAI_API_KEY = secret_data.get('api-key')
-    print(f"Successfully retrieved OpenAI API key from Secrets Manager")
-except Exception as e:
-    print(f"Error retrieving OpenAI API key from Secrets Manager: {str(e)}")
-    print("Will use rule-based categorization as fallback")
 
 # Initialize DynamoDB tables
 table = dynamodb.Table(TABLE_NAME)
