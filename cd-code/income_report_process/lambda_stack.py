@@ -103,8 +103,9 @@ class LambdaStack(Stack):
         api.add_routes(
             path="/{proxy+}",
             methods=[apigateway.HttpMethod.ANY],
-            integration=apigateway.HttpLambdaIntegration(
-                handler=lambda_function
+            integration=apigateway.HttpIntegration(
+                handler=lambda_function,
+                payload_format_version=apigateway.PayloadFormatVersion.VERSION_2_0
             )
         )
 
