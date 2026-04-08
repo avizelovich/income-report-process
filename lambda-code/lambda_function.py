@@ -52,7 +52,7 @@ def lambda_handler(event, context):
         if action == 'categorize':
             return handle_categorize_action(event)
         else:
-            return handle_process_action(event)
+            return handle_process_action(event, context)
             
     except Exception as e:
         print(f"Error in lambda_handler: {str(e)}")
@@ -208,7 +208,7 @@ def get_business_category(business_name):
         print(f"Error looking up business category for '{business_name}': {str(e)}")
         return None
 
-def handle_process_action(event):
+def handle_process_action(event, context):
     """Handle original process action - unchanged"""
     try:
         print(f"Received event: {json.dumps(event, cls=CustomJSONEncoder)}")
