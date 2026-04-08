@@ -5,6 +5,7 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_s3 as s3,
     aws_s3_notifications as s3n,
+    aws_apigatewayv2 as apigateway,
     Duration,
     Size,
     CfnParameter,
@@ -94,7 +95,7 @@ class LambdaStack(Stack):
         )
 
         # API Gateway for manual triggering
-        api = _lambda.HttpApi(
+        api = apigateway.HttpApi(
             self, "IncomeReportApi",
             default_function=lambda_function
         )
