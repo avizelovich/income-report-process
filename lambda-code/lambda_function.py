@@ -55,9 +55,14 @@ def handle_categorize_action(event):
     try:
         print("Starting categorize action...")
         
-        # Initialize counters
+        # Scan all expense records
+        response = table.scan()
+        expenses = response.get('Items', [])
+        print(f"Found {len(expenses)} expense records to process")
+        
+        # Statistics
         stats = {
-            'total_expenses': 0,
+            'total_expenses': len(expenses),
             'already_categorized': 0,
             'updated': 0,
             'no_matching_category': 0,
