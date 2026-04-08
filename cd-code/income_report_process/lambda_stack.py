@@ -5,7 +5,7 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_s3 as s3,
     aws_s3_notifications as s3n,
-    aws_apigatewayv2 as apigateway,
+    aws_apigateway as apigateway,
     Duration,
     Size,
     CfnParameter,
@@ -95,17 +95,10 @@ class LambdaStack(Stack):
         )
 
         # API Gateway for manual triggering
-        api = apigateway.HttpApi(
-            self, "IncomeReportApi"
-        )
-        
-        # Add Lambda integration for all routes
-        api.add_routes(
-            path="/{proxy+}",
-            methods=[apigateway.HttpMethod.ANY],
-            integration=apigateway.HttpRouteIntegration(
-                handler=lambda_function
-            )
+        api = apigateway.LambdaRestApi(
+            self, "IncomeReportApi",
+            handler=lambda_function,
+            proxy=True
         )
 
         # CloudFormation outputs
