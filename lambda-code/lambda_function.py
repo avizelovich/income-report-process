@@ -10,6 +10,9 @@ from decimal import Decimal
 dynamodb = boto3.resource('dynamodb')
 s3 = boto3.client('s3')
 
+# Import DynamoDB conditions for queries
+from boto3.dynamodb.conditions import Key, Attr
+
 # Get environment variables
 TABLE_NAME = os.environ.get('TABLE_NAME')
 BUCKET_NAME = os.environ.get('BUCKET_NAME')
@@ -37,6 +40,8 @@ def lambda_handler(event, context):
         
         if action == 'categorize':
             return handle_categorize_action(event)
+        elif action == 'category-calc':
+            return handle_category_calc_action(event)
         else:
             return handle_process_action(event, context)
             
@@ -156,6 +161,113 @@ def handle_categorize_action(event):
             },
             'body': json.dumps({
                 'message': 'Error during categorization',
+                'error': str(e)
+            }, cls=CustomJSONEncoder)
+        }
+
+def handle_category_calc_action(event):
+    """Handle category-calc action - calculate totals for each business category"""
+    try:
+        print("Starting category-calc action...")
+        print(f"Event received: {json.dumps(event, cls=CustomJSONEncoder)}")
+        
+        # Get all business categories
+        response = business_category_table.scan()
+        business_categories = response.get('Items', [])
+        print(f"Found {len(business_categories)} business categories to process")
+        
+        # Statistics
+        stats = {
+            'total_businesses': len(business_categories),
+            'updated': 0,
+            'errors': 0
+        }
+        
+        # Process each business category
+        for i, business in enumerate(business_categories, 1):
+            try:
+                business_name = business.get('business_name', '').strip()
+                print(f"Processing business {i}/{len(business_categories)}: {business_name}")
+                
+                if not business_name:
+                    stats['errors'] += 1
+                    print(f"  -> Skipping - no business name")
+                    continue
+                
+                # Scan expenses table for this business (no GSI on business_name)
+                expenses_response = table.scan(
+                    FilterExpression=Attr('business_name').eq(business_name)
+                )
+                
+                expenses = expenses_response.get('Items', [])
+                total_items = len(expenses)
+                total_amount = 0
+                
+                # Calculate total amount
+                for expense in expenses:
+                    amount = expense.get('payment_current', 0)
+                    if amount and isinstance(amount, (int, float, Decimal)):
+                        total_amount += float(amount)
+                    elif amount and isinstance(amount, str):
+                        try:
+                            total_amount += float(amount)
+                        except ValueError:
+                            print(f"  -> Warning: Invalid amount format: {amount}")
+                
+                print(f"  -> Found {total_items} items, total amount: {total_amount:.2f}")
+                
+                # Update business category with calculated totals
+                business_category_table.update_item(
+                    Key={'business_name': business_name},
+                    UpdateExpression="SET expenses_total_items = :items, expenses_total_amount = :amount, updated_at = :updated",
+                    ExpressionAttributeValues={
+                        ':items': total_items,
+                        ':amount': int(total_amount * 100) if total_amount else 0,  # Store as integer (cents)
+                        ':updated': datetime.utcnow().isoformat()
+                    },
+                    ReturnValues="UPDATED_NEW"
+                )
+                
+                stats['updated'] += 1
+                print(f"  -> Updated totals for {business_name}: {total_items} items, {total_amount:.2f} total")
+                
+            except Exception as e:
+                stats['errors'] += 1
+                print(f"  -> Error processing business {business_name}: {str(e)}")
+        
+        # Print summary
+        print(f"\n=== CATEGORY CALC SUMMARY ===")
+        print(f"Total businesses processed: {stats['total_businesses']}")
+        print(f"Updated with new totals: {stats['updated']}")
+        print(f"Errors: {stats['errors']}")
+        print(f"=============================\n")
+        
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+            },
+            'body': json.dumps({
+                'message': 'Category totals calculation completed successfully',
+                'statistics': stats
+            }, cls=CustomJSONEncoder)
+        }
+        
+    except Exception as e:
+        print(f"Error in category-calc action: {str(e)}")
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS'
+            },
+            'body': json.dumps({
+                'message': 'Error during category totals calculation',
                 'error': str(e)
             }, cls=CustomJSONEncoder)
         }
