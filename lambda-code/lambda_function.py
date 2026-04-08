@@ -205,7 +205,18 @@ def handle_category_calc_action(event):
                 
                 # Calculate total amount
                 for expense in expenses:
-                    amount = expense.get('payment_current', 0)
+                    # Log all available fields for debugging
+                    print(f"  -> Expense record: {json.dumps(expense, cls=CustomJSONEncoder)}")
+                    
+                    # Try different amount field names
+                    amount = (
+                        expense.get('payment_current') or 
+                        expense.get('payment_total') or 
+                        expense.get('סכום חיוב בש''ח') or 
+                        expense.get('סכום קנייה') or 
+                        0
+                    )
+                    
                     print(f"  -> Processing expense amount: {amount} (type: {type(amount)})")
                     
                     if amount is None:
