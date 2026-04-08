@@ -206,13 +206,29 @@ def handle_category_calc_action(event):
                 # Calculate total amount
                 for expense in expenses:
                     amount = expense.get('payment_current', 0)
-                    if amount and isinstance(amount, (int, float, Decimal)):
+                    print(f"  -> Processing expense amount: {amount} (type: {type(amount)})")
+                    
+                    if amount is None:
+                        continue
+                    
+                    # Handle different amount types
+                    if isinstance(amount, Decimal):
                         total_amount += float(amount)
-                    elif amount and isinstance(amount, str):
+                        print(f"  -> Added Decimal amount: {float(amount)}")
+                    elif isinstance(amount, (int, float)):
+                        total_amount += float(amount)
+                        print(f"  -> Added numeric amount: {float(amount)}")
+                    elif isinstance(amount, str):
                         try:
-                            total_amount += float(amount)
+                            # Clean the string and convert
+                            clean_amount = amount.strip().replace(',', '').replace(' ', '')
+                            if clean_amount:
+                                total_amount += float(clean_amount)
+                                print(f"  -> Added string amount: {float(clean_amount)}")
                         except ValueError:
                             print(f"  -> Warning: Invalid amount format: {amount}")
+                    else:
+                        print(f"  -> Warning: Unknown amount type: {type(amount)}")
                 
                 print(f"  -> Found {total_items} items, total amount: {total_amount:.2f}")
                 
