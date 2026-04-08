@@ -165,11 +165,56 @@ def handle_categorize_action(event):
             }, cls=CustomJSONEncoder)
         }
 
+def initialize_business_category_columns():
+    """Initialize business-category table with new columns if they don't exist"""
+    try:
+        print("Initializing business-category table columns...")
+        
+        # Check if table exists and has any items
+        response = business_category_table.scan(Limit=1)
+        items = response.get('Items', [])
+        
+        if not items:
+            print("No items in business-category table, nothing to initialize")
+            return
+        
+        # Get first item to check if new columns exist
+        sample_item = items[0]
+        has_expenses_total_items = 'expenses_total_items' in sample_item
+        has_expenses_total_amount = 'expenses_total_amount' in sample_item
+        
+        print(f"Sample item: {json.dumps(sample_item, cls=CustomJSONEncoder)}")
+        print(f"Has expenses_total_items: {has_expenses_total_items}")
+        print(f"Has expenses_total_amount: {has_expenses_total_amount}")
+        
+        if not has_expenses_total_items or not has_expenses_total_amount:
+            print("Adding missing columns to business-category table...")
+            
+            # Update sample item to include new columns
+            business_category_table.update_item(
+                Key={'business_name': sample_item['business_name']},
+                UpdateExpression="SET expenses_total_items = :items, expenses_total_amount = :amount, updated_at = :updated",
+                ExpressionAttributeValues={
+                    ':items': 0,  # Initialize to 0
+                    ':amount': Decimal('0'),  # Initialize to Decimal
+                    ':updated': datetime.utcnow().isoformat()
+                }
+            )
+            print("Added missing columns to business-category table")
+        else:
+            print("Business-category table already has required columns")
+            
+    except Exception as e:
+        print(f"Error initializing business-category columns: {str(e)}")
+
 def handle_category_calc_action(event):
     """Handle category-calc action - calculate totals for each business category"""
     try:
         print("Starting category-calc action...")
         print(f"Event received: {json.dumps(event, cls=CustomJSONEncoder)}")
+        
+        # Initialize business-category table with new columns if needed
+        initialize_business_category_columns()
         
         # Get all business categories
         response = business_category_table.scan()
