@@ -103,7 +103,7 @@ def handle_categorize_action(event):
                             'purchase_id': purchase_id,
                             'business_date': business_date
                         },
-                        UpdateExpression="SET #category = :cat",
+                        UpdateExpression="SET category = :cat",
                         ExpressionAttributeValues={
                             ':cat': category
                         },
